@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Video → MP3</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0e0f11;
+      --surface: #16181c;
+      --border: #2a2d35;
+      --border-active: #4a9eff;
+      --text: #d4d8e2;
+      --text-dim: #5a6070;
+      --text-bright: #f0f2f7;
+      --accent: #4a9eff;
+      --accent-dim: rgba(74, 158, 255, 0.12);
+      --success: #3dd68c;
+      --success-dim: rgba(61, 214, 140, 0.12);
+      --error: #ff5f57;
+      --error-dim: rgba(255, 95, 87, 0.12);
+      --warn: #f5a623;
+      --mono: 'IBM Plex Mono', monospace;
+      --sans: 'IBM Plex Sans', sans-serif;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 48px 16px;
+    }
+
+    /* Background grid */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(74, 158, 255, 0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(74, 158, 255, 0.025) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .container {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      max-width: 560px;
+    }
+
+    header {
+      margin-bottom: 40px;
+    }
+
+    .header-label {
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 400;
+      color: var(--accent);
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    h1 {
+      font-family: var(--mono);
+      font-size: 28px;
+      font-weight: 500;
+      color: var(--text-bright);
+      letter-spacing: -0.02em;
+    }
+
+    h1 span {
+      color: var(--accent);
+    }
+
+    .subtitle {
+      margin-top: 8px;
+      font-size: 14px;
+      font-weight: 300;
+      color: var(--text-dim);
+    }
+
+    /* Drop zone */
+    .drop-zone {
+      border: 1.5px dashed var(--border);
+      border-radius: 8px;
+      padding: 48px 32px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      background: var(--surface);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .drop-zone:hover,
+    .drop-zone.drag-over {
+      border-color: var(--accent);
+      background: var(--accent-dim);
+    }
+
+    .drop-zone input[type="file"] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+      width: 100%;
+      height: 100%;
+    }
+
+    .drop-icon {
+      font-size: 32px;
+      margin-bottom: 12px;
+      display: block;
+      opacity: 0.6;
+    }
+
+    .drop-title {
+      font-family: var(--mono);
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-bright);
+      margin-bottom: 6px;
+    }
+
+    .drop-subtitle {
+      font-size: 12px;
+      color: var(--text-dim);
+      font-family: var(--mono);
+    }
+
+    .drop-subtitle em {
+      font-style: normal;
+      color: var(--text);
+    }
+
+    /* Selected file info */
+    .file-info {
+      display: none;
+      align-items: center;
+      gap: 12px;
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 16px;
+      margin-top: 12px;
+    }
+
+    .file-info.visible { display: flex; }
+
+    .file-icon {
+      font-size: 20px;
+      flex-shrink: 0;
+    }
+
+    .file-details {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .file-name {
+      font-family: var(--mono);
+      font-size: 13px;
+      color: var(--text-bright);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .file-size {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text-dim);
+      margin-top: 2px;
+    }
+
+    .file-clear {
+      background: none;
+      border: none;
+      color: var(--text-dim);
+      cursor: pointer;
+      font-size: 18px;
+      padding: 2px 4px;
+      border-radius: 4px;
+      transition: color 0.15s;
+      line-height: 1;
+    }
+
+    .file-clear:hover { color: var(--error); }
+
+    /* Submit button */
+    .btn-convert {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      margin-top: 16px;
+      padding: 14px;
+      background: var(--accent);
+      color: #fff;
+      font-family: var(--mono);
+      font-size: 13px;
+      font-weight: 500;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: opacity 0.15s, transform 0.1s;
+    }
+
+    .btn-convert:hover:not(:disabled) { opacity: 0.88; transform: translateY(-1px); }
+    .btn-convert:active:not(:disabled) { transform: translateY(0); }
+    .btn-convert:disabled { opacity: 0.35; cursor: not-allowed; }
+
+    /* Progress section */
+    .progress-section {
+      display: none;
+      margin-top: 24px;
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .progress-section.visible { display: block; }
+
+    .progress-stage {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .progress-stage:last-child { border-bottom: none; }
+
+    .stage-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+
+    .stage-label {
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .stage-label.upload  { color: var(--accent); }
+    .stage-label.convert { color: var(--warn); }
+    .stage-label.done    { color: var(--success); }
+
+    .stage-pct {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+
+    .progress-bar-track {
+      height: 4px;
+      background: var(--border);
+      border-radius: 99px;
+      overflow: hidden;
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      border-radius: 99px;
+      transition: width 0.3s ease;
+      width: 0%;
+    }
+
+    .progress-bar-fill.upload  { background: var(--accent); }
+    .progress-bar-fill.convert { background: var(--warn); }
+    .progress-bar-fill.done    { background: var(--success); }
+
+    .stage-status {
+      margin-top: 6px;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+
+    /* Download / error */
+    .result-box {
+      display: none;
+      margin-top: 24px;
+      border-radius: 8px;
+      padding: 20px;
+      border: 1.5px solid;
+    }
+
+    .result-box.success {
+      display: block;
+      border-color: var(--success);
+      background: var(--success-dim);
+    }
+
+    .result-box.error {
+      display: block;
+      border-color: var(--error);
+      background: var(--error-dim);
+    }
+
+    .result-title {
+      font-family: var(--mono);
+      font-size: 12px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+
+    .result-box.success .result-title { color: var(--success); }
+    .result-box.error   .result-title { color: var(--error); }
+
+    .result-msg {
+      font-size: 13px;
+      color: var(--text);
+      margin-bottom: 16px;
+      line-height: 1.5;
+    }
+
+    .result-box.error .result-msg { font-family: var(--mono); font-size: 12px; }
+
+    .btn-download {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 20px;
+      background: var(--success);
+      color: #0e0f11;
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      text-decoration: none;
+      border-radius: 5px;
+      transition: opacity 0.15s;
+    }
+
+    .btn-download:hover { opacity: 0.85; }
+
+    .btn-again {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 12px;
+      padding: 8px 16px;
+      background: none;
+      border: 1.5px solid var(--border);
+      color: var(--text-dim);
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
+    }
+
+    .btn-again:hover { border-color: var(--text-dim); color: var(--text); }
+
+    /* Log line (optional subtle detail) */
+    .log-line {
+      margin-top: 32px;
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--text-dim);
+      opacity: 0.5;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <nav style="display:flex;gap:6px;margin-bottom:32px;">
+      <a href="/" style="font-family:var(--mono);font-size:11px;letter-spacing:0.12em;text-transform:uppercase;text-decoration:none;padding:6px 12px;border-radius:4px;border:1.5px solid var(--border);color:var(--text-dim);">← Dashboard</a>
+      <a href="/video.html" style="font-family:var(--mono);font-size:11px;letter-spacing:0.12em;text-transform:uppercase;text-decoration:none;padding:6px 12px;border-radius:4px;border:1.5px solid var(--accent);color:var(--accent);">Video → MP3</a>
+      <a href="/youtube.html" style="font-family:var(--mono);font-size:11px;letter-spacing:0.12em;text-transform:uppercase;text-decoration:none;padding:6px 12px;border-radius:4px;border:1.5px solid var(--border);color:var(--text-dim);">YouTube → MP3</a>
+    </nav>
+
+    <header>
+      <div class="header-label">// pihole.local utility</div>
+      <h1>video <span>→</span> mp3</h1>
+      <p class="subtitle">Extract audio from video files using ffmpeg</p>
+    </header>
+
+    <!-- Drop zone -->
+    <div class="drop-zone" id="dropZone">
+      <input type="file" id="fileInput" accept=".mp4,.mov,.avi,.mkv,.webm,.m4v" />
+      <span class="drop-icon">🎬</span>
+      <div class="drop-title">Drop a video file here</div>
+      <div class="drop-subtitle">or click to browse &nbsp;·&nbsp; <em>.mp4 .mov .avi .mkv .webm</em></div>
+    </div>
+
+    <!-- Selected file info -->
+    <div class="file-info" id="fileInfo">
+      <span class="file-icon">📄</span>
+      <div class="file-details">
+        <div class="file-name" id="fileName"></div>
+        <div class="file-size" id="fileSize"></div>
+      </div>
+      <button class="file-clear" id="fileClear" title="Remove file">✕</button>
+    </div>
+
+    <!-- Convert button -->
+    <button class="btn-convert" id="btnConvert" disabled>
+      ▶ &nbsp; Convert to MP3
+    </button>
+
+    <!-- Progress section -->
+    <div class="progress-section" id="progressSection">
+      <div class="progress-stage">
+        <div class="stage-header">
+          <span class="stage-label upload">Upload</span>
+          <span class="stage-pct" id="uploadPct">0%</span>
+        </div>
+        <div class="progress-bar-track">
+          <div class="progress-bar-fill upload" id="uploadBar"></div>
+        </div>
+        <div class="stage-status" id="uploadStatus">Waiting...</div>
+      </div>
+      <div class="progress-stage">
+        <div class="stage-header">
+          <span class="stage-label convert">Conversion</span>
+          <span class="stage-pct" id="convertPct">—</span>
+        </div>
+        <div class="progress-bar-track">
+          <div class="progress-bar-fill convert" id="convertBar"></div>
+        </div>
+        <div class="stage-status" id="convertStatus">Waiting for upload...</div>
+      </div>
+    </div>
+
+    <!-- Result: success -->
+    <div class="result-box" id="resultSuccess">
+      <div class="result-title">✓ Conversion complete</div>
+      <div class="result-msg" id="resultFilename"></div>
+      <a class="btn-download" id="downloadLink" href="#">↓ &nbsp; Download MP3</a>
+      <br/>
+      <button class="btn-again" id="btnAgain">↺ &nbsp; Convert another</button>
+    </div>
+
+    <!-- Result: error -->
+    <div class="result-box" id="resultError">
+      <div class="result-title">✗ Conversion failed</div>
+      <div class="result-msg" id="errorMsg"></div>
+      <button class="btn-again" id="btnAgainError">↺ &nbsp; Try again</button>
+    </div>
+
+    <div class="log-line" id="logLine">ready</div>
+  </div>
+
+  <script>
+    const dropZone    = document.getElementById('dropZone');
+    const fileInput   = document.getElementById('fileInput');
+    const fileInfo    = document.getElementById('fileInfo');
+    const fileName    = document.getElementById('fileName');
+    const fileSize    = document.getElementById('fileSize');
+    const fileClear   = document.getElementById('fileClear');
+    const btnConvert  = document.getElementById('btnConvert');
+    const progressSection = document.getElementById('progressSection');
+    const uploadBar   = document.getElementById('uploadBar');
+    const uploadPct   = document.getElementById('uploadPct');
+    const uploadStatus= document.getElementById('uploadStatus');
+    const convertBar  = document.getElementById('convertBar');
+    const convertPct  = document.getElementById('convertPct');
+    const convertStatus = document.getElementById('convertStatus');
+    const resultSuccess = document.getElementById('resultSuccess');
+    const resultError   = document.getElementById('resultError');
+    const resultFilename = document.getElementById('resultFilename');
+    const downloadLink  = document.getElementById('downloadLink');
+    const errorMsg    = document.getElementById('errorMsg');
+    const logLine     = document.getElementById('logLine');
+
+    let selectedFile = null;
+    let pollInterval = null;
+
+    function formatBytes(bytes) {
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+      return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    }
+
+    function log(msg) {
+      logLine.textContent = msg;
+    }
+
+    function setFile(file) {
+      selectedFile = file;
+      fileName.textContent = file.name;
+      fileSize.textContent = formatBytes(file.size);
+      fileInfo.classList.add('visible');
+      btnConvert.disabled = false;
+      log(`selected: ${file.name}`);
+    }
+
+    function clearFile() {
+      selectedFile = null;
+      fileInput.value = '';
+      fileInfo.classList.remove('visible');
+      btnConvert.disabled = true;
+      log('ready');
+    }
+
+    function reset() {
+      clearFile();
+      progressSection.classList.remove('visible');
+      resultSuccess.classList.remove('success');
+      resultSuccess.style.display = 'none';
+      resultError.style.display = 'none';
+      resultError.classList.remove('error');
+      uploadBar.style.width = '0%';
+      uploadPct.textContent = '0%';
+      uploadStatus.textContent = 'Waiting...';
+      convertBar.style.width = '0%';
+      convertPct.textContent = '—';
+      convertStatus.textContent = 'Waiting for upload...';
+      btnConvert.disabled = true;
+      dropZone.style.display = '';
+      if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+    }
+
+    // Drag-and-drop
+    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+    dropZone.addEventListener('drop', e => {
+      e.preventDefault();
+      dropZone.classList.remove('drag-over');
+      const file = e.dataTransfer.files[0];
+      if (file) setFile(file);
+    });
+
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files[0]) setFile(fileInput.files[0]);
+    });
+
+    fileClear.addEventListener('click', clearFile);
+    document.getElementById('btnAgain').addEventListener('click', reset);
+    document.getElementById('btnAgainError').addEventListener('click', reset);
+
+    // Upload + convert flow
+    btnConvert.addEventListener('click', () => {
+      if (!selectedFile) return;
+
+      btnConvert.disabled = true;
+      dropZone.style.display = 'none';
+      fileInfo.classList.remove('visible');
+      progressSection.classList.add('visible');
+      resultSuccess.style.display = 'none';
+      resultError.style.display = 'none';
+
+      const formData = new FormData();
+      formData.append('video', selectedFile);
+
+      const xhr = new XMLHttpRequest();
+
+      // Upload progress
+      xhr.upload.addEventListener('progress', e => {
+        if (e.lengthComputable) {
+          const pct = Math.round((e.loaded / e.total) * 100);
+          uploadBar.style.width = pct + '%';
+          uploadPct.textContent = pct + '%';
+          uploadStatus.textContent = `${formatBytes(e.loaded)} / ${formatBytes(e.total)}`;
+          log(`uploading... ${pct}%`);
+        }
+      });
+
+      xhr.upload.addEventListener('load', () => {
+        uploadBar.style.width = '100%';
+        uploadPct.textContent = '100%';
+        uploadStatus.textContent = 'Upload complete';
+        convertStatus.textContent = 'Starting ffmpeg...';
+        log('upload complete, waiting for conversion...');
+      });
+
+      xhr.addEventListener('load', () => {
+        if (xhr.status !== 200) {
+          showError(`Upload failed: ${xhr.statusText}`);
+          return;
+        }
+        const { jobId, error } = JSON.parse(xhr.responseText);
+        if (error) { showError(error); return; }
+        pollConversion(jobId);
+      });
+
+      xhr.addEventListener('error', () => showError('Network error during upload.'));
+
+      xhr.open('POST', '/upload');
+      xhr.send(formData);
+    });
+
+    function pollConversion(jobId) {
+      convertStatus.textContent = 'Running ffmpeg...';
+      log(`converting... job ${jobId.slice(0, 8)}`);
+
+      pollInterval = setInterval(async () => {
+        try {
+          const res = await fetch(`/status/${jobId}`);
+          const data = await res.json();
+
+          if (data.status === 'processing') {
+            const pct = data.conversionProgress;
+            convertBar.style.width = pct + '%';
+            convertPct.textContent = pct + '%';
+            convertStatus.textContent = pct > 0 ? `${pct}% processed` : 'Running ffmpeg...';
+            log(`converting... ${pct}%`);
+
+          } else if (data.status === 'done') {
+            clearInterval(pollInterval);
+            convertBar.style.width = '100%';
+            convertPct.textContent = '100%';
+            convertStatus.textContent = 'Done';
+            log('conversion complete');
+            showSuccess(jobId, data.filename);
+
+          } else if (data.status === 'error') {
+            clearInterval(pollInterval);
+            showError(data.error || 'Conversion failed.');
+          }
+        } catch (e) {
+          clearInterval(pollInterval);
+          showError('Lost connection while polling job status.');
+        }
+      }, 1500);
+    }
+
+    function showSuccess(jobId, filename) {
+      resultFilename.textContent = filename;
+      downloadLink.href = `/download/${jobId}`;
+      downloadLink.download = filename;
+      resultSuccess.style.display = 'block';
+      resultSuccess.className = 'result-box success';
+    }
+
+    function showError(msg) {
+      errorMsg.textContent = msg;
+      resultError.style.display = 'block';
+      resultError.className = 'result-box error';
+      btnConvert.disabled = false;
+      log('error: ' + msg);
+    }
+  </script>
+</body>
+</html>

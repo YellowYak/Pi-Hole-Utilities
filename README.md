@@ -1,0 +1,114 @@
+# Pi Utilities
+
+Three self-hosted utilities running on your Pi-hole device. (This document assumes the Pi-hole device is accessible on the local network via IP address 192.168.1.69 and/or the domain name `pihole.local`. Update the instructions below to use whatever IP address and/or domain name that is applicable for the Pi-hole on your network.)
+
+| Page | URL |
+|---|---|
+| Dashboard | http://pihole.local:3000/ |
+| Video → MP3 | http://pihole.local:3000/video.html |
+| YouTube → MP3 | http://pihole.local:3000/youtube.html |
+
+---
+
+## Prerequisites
+
+### Node.js
+```bash
+curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
+sudo apt install -y nodejs
+node --version && npm --version
+```
+
+### ffmpeg
+```bash
+sudo apt install -y ffmpeg
+```
+
+### yt-dlp
+```bash
+sudo apt install -y python3-pip
+sudo pip3 install yt-dlp --break-system-packages
+yt-dlp --version
+```
+
+Keep yt-dlp current — YouTube changes its internals frequently. Update via pip:
+```bash
+sudo pip3 install -U yt-dlp --break-system-packages
+```
+
+To automate this, add a weekly cron job (runs as root, so no sudo prefix needed):
+```bash
+sudo crontab -e
+```
+Add:
+```
+0 3 * * 0 pip3 install -U yt-dlp --break-system-packages >> /var/log/yt-dlp-update.log 2>&1
+```
+
+---
+
+## Installation
+
+```bash
+scp -r ./video-converter pi@192.168.1.69:/home/pi/video-converter
+ssh pi@192.168.1.69
+cd /home/pi/video-converter
+npm install
+```
+
+---
+
+## Test manually first
+
+```bash
+node server.js
+```
+
+Verify all three pages work before setting up the service:
+- http://pihole.local:3000/ — Dashboard with system stats
+- http://pihole.local:3000/video.html — upload a video, verify MP3 download works
+- http://pihole.local:3000/youtube.html — paste a YouTube URL, verify MP3/ZIP download works
+
+---
+
+## Set up as a systemd service (auto-start on boot)
+
+```bash
+sudo cp /home/pi/video-converter/video-converter.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable video-converter
+sudo systemctl start video-converter
+sudo systemctl status video-converter
+```
+
+---
+
+## Configure lighttpd proxy (optional)
+
+To access via http://pihole.local/mysite instead of port 3000:
+
+```bash
+sudo nano /etc/lighttpd/lighttpd.conf
+```
+
+Add:
+```
+server.modules += ( "mod_proxy" )
+
+$HTTP["url"] =~ "^/mysite" {
+    proxy.server = ( "" => (( "host" => "127.0.0.1", "port" => 3000 )))
+    proxy.header = ( "map-urlpath" => ( "/mysite" => "" ) )
+}
+```
+
+```bash
+sudo service lighttpd restart
+```
+
+---
+
+## Logs
+
+```bash
+sudo journalctl -u video-converter -f
+```

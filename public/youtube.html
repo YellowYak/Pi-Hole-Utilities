@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>YouTube → MP3</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0e0f11;
+      --surface: #16181c;
+      --border: #2a2d35;
+      --border-active: #ff4e6a;
+      --text: #d4d8e2;
+      --text-dim: #5a6070;
+      --text-bright: #f0f2f7;
+      --accent: #ff4e6a;
+      --accent-dim: rgba(255, 78, 106, 0.10);
+      --success: #3dd68c;
+      --success-dim: rgba(61, 214, 140, 0.12);
+      --error: #ff5f57;
+      --error-dim: rgba(255, 95, 87, 0.12);
+      --mono: 'IBM Plex Mono', monospace;
+      --sans: 'IBM Plex Sans', sans-serif;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 48px 16px;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(255, 78, 106, 0.02) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 78, 106, 0.02) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .container {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      max-width: 560px;
+    }
+
+    /* Nav */
+    .nav {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 32px;
+    }
+
+    .nav a {
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      text-decoration: none;
+      padding: 6px 12px;
+      border-radius: 4px;
+      border: 1.5px solid var(--border);
+      color: var(--text-dim);
+      transition: border-color 0.15s, color 0.15s;
+    }
+
+    .nav a:hover { color: var(--text); border-color: var(--text-dim); }
+    .nav a.active { border-color: var(--accent); color: var(--accent); }
+
+    /* Header */
+    header { margin-bottom: 40px; }
+
+    .header-label {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--accent);
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    h1 {
+      font-family: var(--mono);
+      font-size: 28px;
+      font-weight: 500;
+      color: var(--text-bright);
+      letter-spacing: -0.02em;
+    }
+
+    h1 span { color: var(--accent); }
+
+    .subtitle {
+      margin-top: 8px;
+      font-size: 14px;
+      font-weight: 300;
+      color: var(--text-dim);
+    }
+
+    /* URL input card */
+    .input-card {
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+      transition: border-color 0.2s;
+    }
+
+    .input-card:focus-within { border-color: var(--accent); }
+
+    .input-label {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--accent);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+
+    .url-row {
+      display: flex;
+      gap: 10px;
+    }
+
+    .url-input {
+      flex: 1;
+      background: var(--bg);
+      border: 1.5px solid var(--border);
+      border-radius: 6px;
+      padding: 11px 14px;
+      color: var(--text-bright);
+      font-family: var(--mono);
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.15s;
+      min-width: 0;
+    }
+
+    .url-input::placeholder { color: var(--text-dim); }
+    .url-input:focus { border-color: var(--accent); }
+
+    .btn-go {
+      flex-shrink: 0;
+      padding: 11px 20px;
+      background: var(--accent);
+      color: #fff;
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: opacity 0.15s, transform 0.1s;
+      white-space: nowrap;
+    }
+
+    .btn-go:hover:not(:disabled) { opacity: 0.85; transform: translateY(-1px); }
+    .btn-go:active:not(:disabled) { transform: translateY(0); }
+    .btn-go:disabled { opacity: 0.35; cursor: not-allowed; }
+
+    .input-hint {
+      margin-top: 10px;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+
+    /* Progress */
+    .progress-section {
+      display: none;
+      margin-top: 24px;
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .progress-section.visible { display: block; }
+
+    .progress-stage {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .progress-stage:last-child { border-bottom: none; }
+
+    .stage-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+
+    .stage-label {
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--accent);
+    }
+
+    .stage-label.success { color: var(--success); }
+
+    .stage-pct {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+
+    .progress-bar-track {
+      height: 4px;
+      background: var(--border);
+      border-radius: 99px;
+      overflow: hidden;
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      border-radius: 99px;
+      background: var(--accent);
+      transition: width 0.4s ease;
+      width: 0%;
+    }
+
+    .progress-bar-fill.success { background: var(--success); }
+
+    .stage-status {
+      margin-top: 6px;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+
+    /* Result boxes */
+    .result-box {
+      display: none;
+      margin-top: 24px;
+      border-radius: 8px;
+      padding: 20px;
+      border: 1.5px solid;
+    }
+
+    .result-box.success { display: block; border-color: var(--success); background: var(--success-dim); }
+    .result-box.error   { display: block; border-color: var(--error);   background: var(--error-dim); }
+
+    .result-title {
+      font-family: var(--mono);
+      font-size: 12px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    .result-box.success .result-title { color: var(--success); }
+    .result-box.error   .result-title { color: var(--error); }
+
+    .result-msg {
+      font-size: 13px;
+      color: var(--text);
+      margin-bottom: 16px;
+      line-height: 1.5;
+    }
+
+    .result-box.error .result-msg { font-family: var(--mono); font-size: 12px; }
+
+    .btn-download {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 20px;
+      background: var(--success);
+      color: #0e0f11;
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      text-decoration: none;
+      border-radius: 5px;
+      transition: opacity 0.15s;
+    }
+
+    .btn-download:hover { opacity: 0.85; }
+
+    .btn-again {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 12px;
+      padding: 8px 16px;
+      background: none;
+      border: 1.5px solid var(--border);
+      color: var(--text-dim);
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
+    }
+
+    .btn-again:hover { border-color: var(--text-dim); color: var(--text); }
+
+    .log-line {
+      margin-top: 32px;
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--text-dim);
+      opacity: 0.5;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+
+    <nav class="nav">
+      <a href="/">← Dashboard</a>
+      <a href="/video.html">Video → MP3</a>
+      <a href="/youtube.html" class="active">YouTube → MP3</a>
+    </nav>
+
+    <header>
+      <div class="header-label">// pihole.local utility</div>
+      <h1>youtube <span>→</span> mp3</h1>
+      <p class="subtitle">Download audio from YouTube videos and playlists</p>
+    </header>
+
+    <!-- URL input -->
+    <div class="input-card">
+      <div class="input-label">YouTube URL</div>
+      <div class="url-row">
+        <input
+          class="url-input"
+          id="urlInput"
+          type="text"
+          placeholder="https://www.youtube.com/watch?v=..."
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <button class="btn-go" id="btnGo">▶ &nbsp;Go</button>
+      </div>
+      <div class="input-hint">Paste a video or playlist URL &nbsp;·&nbsp; playlists download as a ZIP</div>
+    </div>
+
+    <!-- Progress -->
+    <div class="progress-section" id="progressSection">
+      <div class="progress-stage" id="stageItem" style="display:none">
+        <div class="stage-header">
+          <span class="stage-label" id="itemLabel">Playlist</span>
+          <span class="stage-pct" id="itemPct"></span>
+        </div>
+        <div class="stage-status" id="itemStatus"></div>
+      </div>
+      <div class="progress-stage">
+        <div class="stage-header">
+          <span class="stage-label" id="overallLabel">Downloading</span>
+          <span class="stage-pct" id="overallPct">0%</span>
+        </div>
+        <div class="progress-bar-track">
+          <div class="progress-bar-fill" id="overallBar"></div>
+        </div>
+        <div class="stage-status" id="overallStatus">Starting...</div>
+      </div>
+    </div>
+
+    <!-- Result: success -->
+    <div class="result-box" id="resultSuccess">
+      <div class="result-title">✓ Ready to download</div>
+      <div class="result-msg" id="resultFilename"></div>
+      <a class="btn-download" id="downloadLink" href="#">↓ &nbsp; Download</a>
+      <br/>
+      <button class="btn-again" id="btnAgain">↺ &nbsp; Download another</button>
+    </div>
+
+    <!-- Result: error -->
+    <div class="result-box" id="resultError">
+      <div class="result-title">✗ Failed</div>
+      <div class="result-msg" id="errorMsg"></div>
+      <button class="btn-again" id="btnAgainError">↺ &nbsp; Try again</button>
+    </div>
+
+    <div class="log-line" id="logLine">ready</div>
+  </div>
+
+  <script>
+    const urlInput       = document.getElementById('urlInput');
+    const btnGo          = document.getElementById('btnGo');
+    const progressSection = document.getElementById('progressSection');
+    const stageItem      = document.getElementById('stageItem');
+    const itemLabel      = document.getElementById('itemLabel');
+    const itemPct        = document.getElementById('itemPct');
+    const itemStatus     = document.getElementById('itemStatus');
+    const overallLabel   = document.getElementById('overallLabel');
+    const overallPct     = document.getElementById('overallPct');
+    const overallBar     = document.getElementById('overallBar');
+    const overallStatus  = document.getElementById('overallStatus');
+    const resultSuccess  = document.getElementById('resultSuccess');
+    const resultError    = document.getElementById('resultError');
+    const resultFilename = document.getElementById('resultFilename');
+    const downloadLink   = document.getElementById('downloadLink');
+    const errorMsg       = document.getElementById('errorMsg');
+    const logLine        = document.getElementById('logLine');
+
+    let pollInterval = null;
+
+    function log(msg) { logLine.textContent = msg; }
+
+    function reset() {
+      urlInput.disabled = false;
+      btnGo.disabled = false;
+      progressSection.classList.remove('visible');
+      resultSuccess.className = 'result-box';
+      resultError.className   = 'result-box';
+      overallBar.style.width  = '0%';
+      overallBar.className    = 'progress-bar-fill';
+      overallPct.textContent  = '0%';
+      overallStatus.textContent = 'Starting...';
+      overallLabel.textContent  = 'Downloading';
+      overallLabel.className    = 'stage-label';
+      stageItem.style.display = 'none';
+      if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+      log('ready');
+    }
+
+    document.getElementById('btnAgain').addEventListener('click', reset);
+    document.getElementById('btnAgainError').addEventListener('click', reset);
+
+    // Allow Enter key in URL input
+    urlInput.addEventListener('keydown', e => { if (e.key === 'Enter') btnGo.click(); });
+
+    btnGo.addEventListener('click', async () => {
+      const url = urlInput.value.trim();
+      if (!url) return;
+
+      btnGo.disabled = true;
+      urlInput.disabled = true;
+      progressSection.classList.add('visible');
+      resultSuccess.className = 'result-box';
+      resultError.className   = 'result-box';
+      log('submitting...');
+
+      try {
+        const res  = await fetch('/youtube/submit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url })
+        });
+        const data = await res.json();
+
+        if (!res.ok || data.error) { showError(data.error || 'Submission failed.'); return; }
+        poll(data.jobId);
+      } catch (e) {
+        showError('Network error. Is the server running?');
+      }
+    });
+
+    const phaseLabels = {
+      downloading: 'Downloading',
+      extracting:  'Extracting audio',
+      processing:  'Processing',
+      packaging:   'Packaging ZIP'
+    };
+
+    function poll(jobId) {
+      log(`job ${jobId.slice(0, 8)} — polling...`);
+
+      pollInterval = setInterval(async () => {
+        try {
+          const res  = await fetch(`/youtube/status/${jobId}`);
+          const data = await res.json();
+
+          // Update phase label
+          const phaseText = phaseLabels[data.phase] || 'Working';
+          overallLabel.textContent = phaseText;
+
+          // Playlist item row
+          if (data.itemTotal > 0) {
+            stageItem.style.display = '';
+            itemLabel.textContent   = `Playlist`;
+            itemPct.textContent     = `${data.itemCurrent} of ${data.itemTotal}`;
+            itemStatus.textContent  = data.itemCurrent > 0
+              ? `Track ${data.itemCurrent}: ${Math.round(data.itemProgress)}%`
+              : 'Starting...';
+          }
+
+          // Overall progress bar
+          const pct = data.overallProgress || 0;
+          overallBar.style.width    = pct + '%';
+          overallPct.textContent    = pct + '%';
+          overallStatus.textContent = data.itemTotal > 0
+            ? `${phaseText}... ${pct}%`
+            : `${phaseText}... ${pct}%`;
+
+          log(`${phaseText.toLowerCase()}... ${pct}%`);
+
+          if (data.status === 'done') {
+            clearInterval(pollInterval);
+            overallBar.style.width    = '100%';
+            overallBar.className      = 'progress-bar-fill success';
+            overallPct.textContent    = '100%';
+            overallLabel.className    = 'stage-label success';
+            overallLabel.textContent  = 'Complete';
+            overallStatus.textContent = 'Done';
+            log('complete');
+            showSuccess(jobId, data.filename, data.outputType);
+
+          } else if (data.status === 'error') {
+            clearInterval(pollInterval);
+            showError(data.error || 'An unknown error occurred.');
+          }
+
+        } catch (e) {
+          clearInterval(pollInterval);
+          showError('Lost connection while polling for status.');
+        }
+      }, 1500);
+    }
+
+    function showSuccess(jobId, filename, outputType) {
+      const isPlaylist = outputType === 'playlist';
+      resultFilename.textContent = isPlaylist
+        ? `${filename} — your playlist tracks are inside`
+        : filename;
+      downloadLink.href     = `/youtube/download/${jobId}`;
+      downloadLink.download = filename;
+      downloadLink.textContent = isPlaylist ? '↓   Download ZIP' : '↓   Download MP3';
+      resultSuccess.className = 'result-box success';
+    }
+
+    function showError(msg) {
+      errorMsg.textContent    = msg;
+      resultError.className   = 'result-box error';
+      btnGo.disabled          = false;
+      urlInput.disabled       = false;
+      log('error');
+    }
+  </script>
+</body>
+</html>
