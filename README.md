@@ -1,12 +1,13 @@
 # Pi Utilities
 
-Three self-hosted utilities running on your Pi-hole device. (This document assumes the Pi-hole device is accessible on the local network via IP address 192.168.1.69 and/or the domain name `pihole.local`. Update the instructions below to use whatever IP address and/or domain name that is applicable for the Pi-hole on your network.)
+Four self-hosted utilities running on your Pi-hole device. (This document assumes the Pi-hole device is accessible on the local network via IP address 192.168.1.69 and/or the domain name `pihole.local`. Update the instructions below to use whatever IP address and/or domain name that is applicable for the Pi-hole on your network.)
 
 | Page | URL |
 |---|---|
 | Dashboard | http://pihole.local:3000/ |
 | Video → MP3 | http://pihole.local:3000/video.html |
 | YouTube → MP3 | http://pihole.local:3000/youtube.html |
+| NBA Watchability | http://pihole.local:3000/nba.html |
 
 ---
 
@@ -45,6 +46,20 @@ Add:
 0 3 * * 0 pip3 install -U yt-dlp --break-system-packages >> /var/log/yt-dlp-update.log 2>&1
 ```
 
+### nba_watchability
+
+Copy the `NbaGameScore` project to the Pi and install it into a virtual environment:
+
+```bash
+scp -r ./NbaGameScore pi@192.168.1.69:/home/pi/nba-watchability
+ssh pi@192.168.1.69
+cd /home/pi/nba-watchability
+python3 -m venv .venv
+.venv/bin/pip install -e .
+```
+
+The server expects the venv at `/home/pi/nba-watchability/.venv/bin/python` (configured via `NBA_PYTHON` in `server.js`).
+
 ---
 
 ## Installation
@@ -64,10 +79,11 @@ npm install
 node server.js
 ```
 
-Verify all three pages work before setting up the service:
+Verify all pages work before setting up the service:
 - http://pihole.local:3000/ — Dashboard with system stats
 - http://pihole.local:3000/video.html — upload a video, verify MP3 download works
 - http://pihole.local:3000/youtube.html — paste a YouTube URL, verify MP3/ZIP download works
+- http://pihole.local:3000/nba.html — enter a past date, verify game scores load
 
 ---
 

@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NBA Watchability</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0e0f11;
+      --surface: #16181c;
+      --border: #2a2d35;
+      --text: #d4d8e2;
+      --text-dim: #5a6070;
+      --text-bright: #f0f2f7;
+      --accent: #f97316;
+      --accent-dim: rgba(249, 115, 22, 0.10);
+      --success: #3dd68c;
+      --success-dim: rgba(61, 214, 140, 0.12);
+      --warn: #f5a623;
+      --error: #ff5f57;
+      --error-dim: rgba(255, 95, 87, 0.12);
+      --mono: 'IBM Plex Mono', monospace;
+      --sans: 'IBM Plex Sans', sans-serif;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 48px 16px 64px;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(249, 115, 22, 0.02) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(249, 115, 22, 0.02) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .container {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      max-width: 680px;
+    }
+
+    /* Nav */
+    .nav {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 32px;
+      flex-wrap: wrap;
+    }
+
+    .nav a {
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      text-decoration: none;
+      padding: 6px 12px;
+      border-radius: 4px;
+      border: 1.5px solid var(--border);
+      color: var(--text-dim);
+      transition: border-color 0.15s, color 0.15s;
+    }
+
+    .nav a:hover { color: var(--text); border-color: var(--text-dim); }
+    .nav a.active { border-color: var(--accent); color: var(--accent); }
+
+    /* Header */
+    header { margin-bottom: 40px; }
+
+    .header-label {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--accent);
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    h1 {
+      font-family: var(--mono);
+      font-size: 28px;
+      font-weight: 500;
+      color: var(--text-bright);
+      letter-spacing: -0.02em;
+    }
+
+    h1 span { color: var(--accent); }
+
+    .subtitle {
+      margin-top: 8px;
+      font-size: 14px;
+      font-weight: 300;
+      color: var(--text-dim);
+    }
+
+    /* Input card */
+    .input-card {
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+      transition: border-color 0.2s;
+    }
+
+    .input-card:focus-within { border-color: var(--accent); }
+
+    .input-label {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--accent);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+
+    .date-row {
+      display: flex;
+      gap: 10px;
+    }
+
+    .date-input {
+      flex: 1;
+      background: var(--bg);
+      border: 1.5px solid var(--border);
+      border-radius: 6px;
+      padding: 11px 14px;
+      color: var(--text-bright);
+      font-family: var(--mono);
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.15s;
+      min-width: 0;
+      color-scheme: dark;
+    }
+
+    .date-input:focus { border-color: var(--accent); }
+
+    .btn-go {
+      flex-shrink: 0;
+      padding: 11px 20px;
+      background: var(--accent);
+      color: #fff;
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: opacity 0.15s, transform 0.1s;
+      white-space: nowrap;
+    }
+
+    .btn-go:hover:not(:disabled) { opacity: 0.85; transform: translateY(-1px); }
+    .btn-go:active:not(:disabled) { transform: translateY(0); }
+    .btn-go:disabled { opacity: 0.35; cursor: not-allowed; }
+
+    .input-hint {
+      margin-top: 10px;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+
+    /* Loading section */
+    .loading-section {
+      display: none;
+      margin-top: 24px;
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      padding: 36px 20px;
+      text-align: center;
+    }
+
+    .loading-section.visible { display: block; }
+
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 20px;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .loading-title {
+      font-family: var(--mono);
+      font-size: 12px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 8px;
+    }
+
+    .loading-elapsed {
+      font-family: var(--mono);
+      font-size: 22px;
+      font-weight: 500;
+      color: var(--text-bright);
+      margin-bottom: 10px;
+    }
+
+    .loading-hint {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+
+    /* Results section */
+    .results-section {
+      display: none;
+      margin-top: 24px;
+    }
+
+    .results-section.visible { display: block; }
+
+    .results-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .results-date {
+      font-family: var(--mono);
+      font-size: 13px;
+      color: var(--text-bright);
+    }
+
+    .results-count {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text-dim);
+      letter-spacing: 0.08em;
+    }
+
+    /* Game cards */
+    .game-card {
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      margin-bottom: 12px;
+      overflow: hidden;
+      transition: border-color 0.2s;
+    }
+
+    .game-card-header {
+      padding: 14px 18px 12px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .game-card-header-left { flex: 1; min-width: 0; }
+
+    .game-matchup {
+      font-family: var(--mono);
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-bright);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .at-sign { color: var(--text-dim); }
+
+    .game-meta {
+      margin-top: 4px;
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--text-dim);
+      letter-spacing: 0.08em;
+    }
+
+    .watch-badge {
+      flex-shrink: 0;
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.15em;
+      color: var(--success);
+      border: 1.5px solid var(--success);
+      border-radius: 3px;
+      padding: 3px 7px;
+      white-space: nowrap;
+      margin-top: 2px;
+    }
+
+    .game-body {
+      padding: 16px 18px;
+      display: flex;
+      gap: 20px;
+      align-items: flex-start;
+    }
+
+    .game-card-footer {
+      padding: 10px 18px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .card-link {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      text-decoration: none;
+      color: var(--text-dim);
+      background: none;
+      border: 1.5px solid var(--border);
+      border-radius: 3px;
+      padding: 3px 8px;
+      cursor: pointer;
+      transition: color 0.15s, border-color 0.15s;
+    }
+
+    .card-link:hover { color: var(--text); border-color: var(--text-dim); }
+
+    .spoiler-reveal {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text-bright);
+    }
+
+    .spoiler-reveal .winner { color: var(--success); }
+
+    /* SVG ring score */
+    .total-ring {
+      position: relative;
+      flex-shrink: 0;
+      width: 72px;
+      height: 72px;
+    }
+
+    .total-ring svg { display: block; }
+
+    .ring-score {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--mono);
+      font-size: 20px;
+      font-weight: 500;
+    }
+
+    /* Factor bars */
+    .factors-list { flex: 1; min-width: 0; }
+
+    .factor-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 7px;
+    }
+
+    .factor-row:last-child { margin-bottom: 0; }
+
+    .factor-name {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--text-dim);
+      width: 100px;
+      flex-shrink: 0;
+      letter-spacing: 0.04em;
+    }
+
+    .factor-bar-track {
+      flex: 1;
+      height: 4px;
+      background: var(--border);
+      border-radius: 99px;
+      overflow: hidden;
+    }
+
+    .factor-bar-fill {
+      height: 100%;
+      border-radius: 99px;
+      transition: width 0.4s ease;
+    }
+
+    .factor-score {
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 500;
+      width: 28px;
+      text-align: right;
+      flex-shrink: 0;
+    }
+
+    /* No games card */
+    .no-games-card {
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      padding: 40px 20px;
+      text-align: center;
+    }
+
+    .no-games-icon {
+      font-family: var(--mono);
+      font-size: 28px;
+      color: var(--text-dim);
+      margin-bottom: 12px;
+    }
+
+    .no-games-msg {
+      font-family: var(--mono);
+      font-size: 13px;
+      color: var(--text);
+      margin-bottom: 6px;
+    }
+
+    .no-games-hint {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+
+    /* Btn again */
+    .btn-again {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 16px;
+      padding: 8px 16px;
+      background: none;
+      border: 1.5px solid var(--border);
+      color: var(--text-dim);
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
+    }
+
+    .btn-again:hover { border-color: var(--text-dim); color: var(--text); }
+
+    /* Error box */
+    .result-box {
+      display: none;
+      margin-top: 24px;
+      border-radius: 8px;
+      padding: 20px;
+      border: 1.5px solid;
+    }
+
+    .result-box.error { display: block; border-color: var(--error); background: var(--error-dim); }
+
+    .result-title {
+      font-family: var(--mono);
+      font-size: 12px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+      color: var(--error);
+    }
+
+    .result-msg {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--text);
+      margin-bottom: 16px;
+      line-height: 1.5;
+    }
+
+    .log-line {
+      margin-top: 32px;
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--text-dim);
+      opacity: 0.5;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+
+    <nav class="nav">
+      <a href="/">← Dashboard</a>
+      <a href="/video.html">Video → MP3</a>
+      <a href="/youtube.html">YouTube → MP3</a>
+      <a href="/nba.html" class="active">NBA</a>
+    </nav>
+
+    <header>
+      <div class="header-label">// pihole.local utility</div>
+      <h1>nba <span>watch</span>ability</h1>
+      <p class="subtitle">Score NBA games by how worth watching they are — spoiler free</p>
+    </header>
+
+    <!-- Date input -->
+    <div class="input-card">
+      <div class="input-label">Game Date</div>
+      <div class="date-row">
+        <input class="date-input" id="dateInput" type="date" required />
+        <button class="btn-go" id="btnGo">▶ &nbsp;Score</button>
+      </div>
+      <div class="input-hint">Scores all NBA games played on the selected date</div>
+    </div>
+
+    <!-- Loading -->
+    <div class="loading-section" id="loadingSection">
+      <div class="spinner"></div>
+      <div class="loading-title">Fetching game data</div>
+      <div class="loading-elapsed" id="loadingElapsed">0s</div>
+      <div class="loading-hint">This takes 30–60 seconds while stats are fetched</div>
+    </div>
+
+    <!-- Results -->
+    <div class="results-section" id="resultsSection">
+      <div class="results-header">
+        <div class="results-date" id="resultsDate"></div>
+        <div class="results-count" id="resultsCount"></div>
+      </div>
+      <div id="gamesList"></div>
+      <button class="btn-again" id="btnNewDate">↺ &nbsp; Check another date</button>
+    </div>
+
+    <!-- Error -->
+    <div class="result-box" id="resultError">
+      <div class="result-title">✗ Failed</div>
+      <div class="result-msg" id="errorMsg"></div>
+      <button class="btn-again" id="btnAgainError">↺ &nbsp; Try again</button>
+    </div>
+
+    <div class="log-line" id="logLine">ready</div>
+  </div>
+
+  <script>
+    const dateInput      = document.getElementById('dateInput');
+    const btnGo          = document.getElementById('btnGo');
+    const loadingSection = document.getElementById('loadingSection');
+    const loadingElapsed = document.getElementById('loadingElapsed');
+    const resultsSection = document.getElementById('resultsSection');
+    const resultsDate    = document.getElementById('resultsDate');
+    const resultsCount   = document.getElementById('resultsCount');
+    const gamesList      = document.getElementById('gamesList');
+    const resultError    = document.getElementById('resultError');
+    const errorMsg       = document.getElementById('errorMsg');
+    const logLine        = document.getElementById('logLine');
+
+    let pollInterval   = null;
+    let elapsedInterval = null;
+    let elapsedSeconds  = 0;
+
+    // Default to yesterday (local time, not UTC)
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yy = yesterday.getFullYear();
+    const mm = String(yesterday.getMonth() + 1).padStart(2, '0');
+    const dd = String(yesterday.getDate()).padStart(2, '0');
+    const yesterdayStr = `${yy}-${mm}-${dd}`;
+    dateInput.value = yesterdayStr;
+    dateInput.max   = yesterdayStr;
+
+    function log(msg) { logLine.textContent = msg; }
+
+    function startElapsed() {
+      elapsedSeconds = 0;
+      loadingElapsed.textContent = '0s';
+      elapsedInterval = setInterval(() => {
+        elapsedSeconds++;
+        loadingElapsed.textContent = elapsedSeconds + 's';
+      }, 1000);
+    }
+
+    function stopElapsed() {
+      if (elapsedInterval) { clearInterval(elapsedInterval); elapsedInterval = null; }
+    }
+
+    function reset() {
+      stopElapsed();
+      if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+      dateInput.disabled = false;
+      btnGo.disabled = false;
+      loadingSection.classList.remove('visible');
+      resultsSection.classList.remove('visible');
+      resultError.className = 'result-box';
+      log('ready');
+    }
+
+    document.getElementById('btnNewDate').addEventListener('click', reset);
+    document.getElementById('btnAgainError').addEventListener('click', reset);
+
+    dateInput.addEventListener('keydown', e => { if (e.key === 'Enter') btnGo.click(); });
+
+    btnGo.addEventListener('click', async () => {
+      const rawDate = dateInput.value;
+      if (!rawDate) return;
+      if (rawDate >= dateInput.max) {
+        dateInput.setCustomValidity('Please select a date in the past.');
+        dateInput.reportValidity();
+        return;
+      }
+      dateInput.setCustomValidity('');
+      const yyyymmdd = rawDate.replace(/-/g, '');
+
+      dateInput.disabled = true;
+      btnGo.disabled = true;
+      loadingSection.classList.add('visible');
+      resultsSection.classList.remove('visible');
+      resultError.className = 'result-box';
+      startElapsed();
+      log('submitting...');
+
+      try {
+        const res  = await fetch('/nba/submit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ date: yyyymmdd })
+        });
+        if (!res.ok && res.headers.get('content-type')?.includes('text/html')) {
+          showError(`Server returned ${res.status} — is the server up to date?`); return;
+        }
+        const data = await res.json();
+        if (!res.ok || data.error) { showError(data.error || 'Submission failed.'); return; }
+        pollNba(data.jobId);
+      } catch (e) {
+        console.error('NBA submit error:', e);
+        showError(`Network error: ${e.message}`);
+      }
+    });
+
+    function pollNba(jobId) {
+      log(`job ${jobId.slice(0, 8)} — scoring games...`);
+      pollInterval = setInterval(async () => {
+        try {
+          const res  = await fetch(`/nba/status/${jobId}`);
+          if (res.status === 404) {
+            clearInterval(pollInterval);
+            stopElapsed();
+            showError('Job not found — it may have expired. Please re-submit.');
+            return;
+          }
+          const data = await res.json();
+          if (data.status === 'done') {
+            clearInterval(pollInterval);
+            stopElapsed();
+            showResults(data.date, data.result);
+          } else if (data.status === 'error') {
+            clearInterval(pollInterval);
+            stopElapsed();
+            showError(data.error || 'An unknown error occurred.');
+          }
+        } catch (e) {
+          clearInterval(pollInterval);
+          stopElapsed();
+          showError('Lost connection while waiting for results.');
+        }
+      }, 2000);
+    }
+
+    function showError(msg) {
+      loadingSection.classList.remove('visible');
+      dateInput.disabled = false;
+      btnGo.disabled = false;
+      errorMsg.textContent = msg;
+      resultError.className = 'result-box error';
+      log('error');
+    }
+
+    function showResults(dateStr, games) {
+      loadingSection.classList.remove('visible');
+
+      // Format date header: "2026-03-14" → "March 14, 2026"
+      const y = +dateStr.slice(0, 4), m = +dateStr.slice(4, 6), d = +dateStr.slice(6, 8);
+      const months = ['January','February','March','April','May','June',
+                      'July','August','September','October','November','December'];
+      resultsDate.textContent = `${months[m - 1]} ${d}, ${y}`;
+
+      if (!games || games.length === 0) {
+        gamesList.innerHTML = `
+          <div class="no-games-card">
+            <div class="no-games-icon">—</div>
+            <div class="no-games-msg">No NBA games found for this date.</div>
+            <div class="no-games-hint">The season runs October through June.</div>
+          </div>`;
+        resultsCount.textContent = '0 games';
+      } else {
+        resultsCount.textContent = `${games.length} game${games.length !== 1 ? 's' : ''}`;
+        gamesList.innerHTML = games.map(renderGameCard).join('');
+      }
+
+      resultsSection.classList.add('visible');
+      log(`scored ${games ? games.length : 0} game(s) — ${dateStr}`);
+    }
+
+    function scoreColor(s) {
+      if (s >= 80) return 'var(--success)';
+      if (s >= 60) return 'var(--warn)';
+      return 'var(--error)';
+    }
+
+    function toggleSpoiler(btn) {
+      const reveal = btn.nextElementSibling;
+      const showing = !reveal.hidden;
+      reveal.hidden = showing;
+      btn.textContent = showing ? 'Show Results' : 'Hide Results';
+    }
+
+    function renderGameCard(game) {
+      const color = scoreColor(game.total);
+      const watchBadge = game.total >= 80
+        ? `<span class="watch-badge">WATCH</span>` : '';
+      const otLabel = game.overtime_periods > 0
+        ? ` &nbsp;·&nbsp; ${game.overtime_periods}OT` : '';
+
+      const circumference = 2 * Math.PI * 30;
+      const dashOffset = circumference * (1 - game.total / 100);
+
+      const factorBars = game.factors.map(f => {
+        const fc = scoreColor(f.score);
+        return `
+          <div class="factor-row">
+            <div class="factor-name">${f.name}</div>
+            <div class="factor-bar-track">
+              <div class="factor-bar-fill" style="width:${f.score}%;background:${fc}"></div>
+            </div>
+            <div class="factor-score" style="color:${fc}">${f.score}</div>
+          </div>`;
+      }).join('');
+
+      return `
+        <div class="game-card" style="border-color:${color}">
+          <div class="game-card-header">
+            <div class="game-card-header-left">
+              <div class="game-matchup">${game.away_team} <span class="at-sign">@</span> ${game.home_team}</div>
+              <div class="game-meta">${game.game_date}${otLabel}</div>
+            </div>
+            ${watchBadge}
+          </div>
+          <div class="game-body">
+            <div class="total-ring">
+              <svg viewBox="0 0 72 72" width="72" height="72">
+                <circle cx="36" cy="36" r="30" fill="none" stroke="var(--border)" stroke-width="5"/>
+                <circle cx="36" cy="36" r="30" fill="none" stroke="${color}" stroke-width="5"
+                  stroke-dasharray="${circumference.toFixed(2)}"
+                  stroke-dashoffset="${dashOffset.toFixed(2)}"
+                  stroke-linecap="round"
+                  transform="rotate(-90 36 36)"/>
+              </svg>
+              <div class="ring-score" style="color:${color}">${game.total}</div>
+            </div>
+            <div class="factors-list">${factorBars}</div>
+          </div>
+          <div class="game-card-footer">
+            <a class="card-link" href="${game.boxscore_url}" target="_blank" rel="noopener">Boxscore ↗</a>
+            <button class="card-link" onclick="toggleSpoiler(this)">Show Results</button>
+            <span class="spoiler-reveal" hidden>
+              ${game.away_team} ${game.away_score} &nbsp;–&nbsp; ${game.home_team} ${game.home_score}
+              &nbsp;·&nbsp; <span class="winner">W: ${game.winner}</span>
+            </span>
+          </div>
+        </div>`;
+    }
+  </script>
+</body>
+</html>

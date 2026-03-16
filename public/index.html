@@ -17,6 +17,7 @@
       --success: #3dd68c; --success-dim: rgba(61,214,140,0.10);
       --warn: #f5a623; --error: #ff5f57;
       --green: #3dd68c; --green-dim: rgba(61,214,140,0.10);
+      --orange: #f97316; --orange-dim: rgba(249,115,22,0.10);
       --mono: 'IBM Plex Mono', monospace; --sans: 'IBM Plex Sans', sans-serif;
     }
     body { background:var(--bg); color:var(--text); font-family:var(--sans); min-height:100vh; padding:48px 16px; }
@@ -35,18 +36,19 @@
     .btn-refresh:hover { border-color:var(--accent); color:var(--accent); }
     .btn-refresh:disabled { opacity:0.4; cursor:not-allowed; }
     .section-label { font-family:var(--mono); font-size:10px; letter-spacing:0.2em; text-transform:uppercase; color:var(--text-dim); margin-bottom:12px; margin-top:32px; }
-    .utility-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; }
-    @media (max-width:640px) { .utility-grid { grid-template-columns:1fr; } }
+    .utility-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:12px; }
     .utility-card { display:block; text-decoration:none; background:var(--surface); border:1.5px solid var(--border); border-radius:8px; padding:20px 22px; transition:border-color 0.2s,background 0.2s,transform 0.15s; }
     .utility-card:hover { transform:translateY(-2px); }
     .utility-card.green:hover { border-color:var(--green); background:var(--green-dim); }
     .utility-card.blue:hover { border-color:var(--blue); background:var(--blue-dim); }
-    .utility-card.red:hover  { border-color:var(--red);  background:var(--red-dim); }
+    .utility-card.red:hover    { border-color:var(--red);    background:var(--red-dim); }
+    .utility-card.orange:hover { border-color:var(--orange); background:var(--orange-dim); }
     .utility-card-icon { font-size:24px; margin-bottom:10px; }
     .utility-card-title { font-family:var(--mono); font-size:14px; font-weight:500; margin-bottom:4px; }
     .utility-card.green .utility-card-title { color:var(--green); }
     .utility-card.blue .utility-card-title { color:var(--blue); }
-    .utility-card.red  .utility-card-title { color:var(--red); }
+    .utility-card.red    .utility-card-title { color:var(--red); }
+    .utility-card.orange .utility-card-title { color:var(--orange); }
     .utility-card-desc { font-size:12px; color:var(--text-dim); line-height:1.5; }
     .stats-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:12px; }
     .stat-card { background:var(--surface); border:1.5px solid var(--border); border-radius:8px; padding:16px 18px; }
@@ -99,6 +101,11 @@
         <div class="utility-card-icon">▶</div>
         <div class="utility-card-title">YouTube → MP3</div>
         <div class="utility-card-desc">Download audio from a YouTube video or playlist</div>
+      </a>
+      <a class="utility-card orange" href="/nba.html">
+        <div class="utility-card-icon">🏀</div>
+        <div class="utility-card-title">NBA Watchability</div>
+        <div class="utility-card-desc">Score NBA games by how worth watching they are</div>
       </a>
     </div>
 

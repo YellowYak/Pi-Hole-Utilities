@@ -16,6 +16,7 @@ app.use(express.json());
 const UPLOAD_DIR  = path.join(__dirname, 'uploads');
 const OUTPUT_DIR  = path.join(__dirname, 'outputs');
 const YOUTUBE_DIR = path.join(__dirname, 'youtube-outputs');
+const NBA_PYTHON   = '/home/pi/nba-watchability/.venv/bin/python';
 
 [UPLOAD_DIR, OUTPUT_DIR, YOUTUBE_DIR].forEach(dir => {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -50,6 +51,13 @@ function timeToSeconds(t) {
 function cleanupPath(p) {
   if (!p) return;
   fs.rm(p, { recursive: true, force: true }, () => {});
+}
+
+function isValidNbaDate(s) {
+  if (!/^\d{8}$/.test(s)) return false;
+  const y = +s.slice(0, 4), m = +s.slice(4, 6), d = +s.slice(6, 8);
+  const dt = new Date(y, m - 1, d);
+  return dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d;
 }
 
 // ─── Video → MP3 ─────────────────────────────────────────────────────────────
@@ -255,6 +263,57 @@ app.get('/youtube/download/:jobId', (req, res) => {
       delete jobs[req.params.jobId];
     }, 10_000);
   });
+});
+
+// ─── NBA Watchability ─────────────────────────────────────────────────────────
+
+app.post('/nba/submit', (req, res) => {
+  const { date } = req.body;
+  if (!date || !isValidNbaDate(date))
+    return res.status(400).json({ error: 'Please provide a valid date in YYYYMMDD format.' });
+
+  const jobId = uuidv4();
+  jobs[jobId] = { type: 'nba', status: 'processing', date, result: null, error: null, createdAt: Date.now() };
+  res.json({ jobId });
+
+  let stdoutBuf = '';
+  let stderrBuf = '';
+  const py = spawn(NBA_PYTHON, ['-m', 'nba_watchability', '--output', 'json', date]);
+
+  py.stdout.on('data', chunk => { stdoutBuf += chunk.toString(); });
+  py.stderr.on('data', chunk => {
+    const text = chunk.toString().trim();
+    stderrBuf += text + '\n';
+    console.error('[nba_watchability]', text);
+  });
+
+  py.on('close', code => {
+    if (code !== 0) {
+      jobs[jobId].status = 'error';
+      jobs[jobId].error  = stderrBuf.trim() || `nba_watchability exited with code ${code}.`;
+      return;
+    }
+    try {
+      const parsed = JSON.parse(stdoutBuf.trim());
+      if (!Array.isArray(parsed)) throw new Error('Expected a JSON array');
+      jobs[jobId].result = parsed;
+      jobs[jobId].status = 'done';
+    } catch (e) {
+      jobs[jobId].status = 'error';
+      jobs[jobId].error  = `Failed to parse output: ${e.message}`;
+    }
+  });
+
+  py.on('error', err => {
+    jobs[jobId].status = 'error';
+    jobs[jobId].error  = `Failed to start ${NBA_PYTHON}: ${err.message}. Is the venv set up at /home/pi/nba-watchability/.venv?`;
+  });
+});
+
+app.get('/nba/status/:jobId', (req, res) => {
+  const job = jobs[req.params.jobId];
+  if (!job || job.type !== 'nba') return res.status(404).json({ error: 'Job not found' });
+  res.json({ status: job.status, date: job.date, result: job.status === 'done' ? job.result : null, error: job.error });
 });
 
 // ─── Periodic cleanup ─────────────────────────────────────────────────────────
