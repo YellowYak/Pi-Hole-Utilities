@@ -743,14 +743,15 @@
       const dashOffset = circumference * (1 - game.total / 100);
 
       const factorBars = game.factors.map(f => {
-        const fc = scoreColor(f.score);
+        const fs = Math.round(f.raw_score * 100);
+        const fc = scoreColor(fs);
         return `
           <div class="factor-row">
             <div class="factor-name">${f.name}</div>
             <div class="factor-bar-track">
-              <div class="factor-bar-fill" style="width:${f.score}%;background:${fc}"></div>
+              <div class="factor-bar-fill" style="width:${fs}%;background:${fc}"></div>
             </div>
-            <div class="factor-score" style="color:${fc}">${f.score}</div>
+            <div class="factor-score" style="color:${fc}">${fs}</div>
           </div>`;
       }).join('');
 
@@ -759,7 +760,7 @@
           <div class="game-card-header">
             <div class="game-card-header-left">
               <div class="game-matchup">${game.away_team} <span class="at-sign">@</span> ${game.home_team}</div>
-              <div class="game-meta">${game.game_date}${otLabel}</div>
+              <div class="game-meta">${new Date(game.game_date).toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'})}${otLabel}</div>
             </div>
             ${watchBadge}
           </div>
@@ -782,7 +783,7 @@
             <button class="card-link" onclick="toggleSpoiler(this)">Show Results</button>
             <span class="spoiler-reveal" hidden>
               ${game.away_team} ${game.away_score} &nbsp;–&nbsp; ${game.home_team} ${game.home_score}
-              &nbsp;·&nbsp; <span class="winner">W: ${game.winner}</span>
+              &nbsp;·&nbsp; <span class="winner">W: ${game.away_score > game.home_score ? game.away_team : game.home_team}</span>
             </span>
           </div>
         </div>`;

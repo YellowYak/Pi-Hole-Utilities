@@ -56,6 +56,19 @@ return a JSON array of game results.
 
 ---
 
+## Docker (alternative deployment)
+
+A `docker-compose.yml` is provided to run both the pi-utilities server and the
+NBA sidecar API as containers. Build the NBA API image first from its own repo:
+
+```bash
+cd ../NbaGameScoreApi && docker build -t nba-game-score-api .
+cd ../Pi\ Hole\ Utilities && docker build -t pi-utilities .
+docker compose up -d
+```
+
+---
+
 ## Installation
 
 ```bash

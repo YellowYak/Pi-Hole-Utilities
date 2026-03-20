@@ -1,0 +1,22 @@
+services:
+  # The NBA watchability scoring API - must be running before pi-utilities starts
+  nba-api:
+    # Image must be built manually from the NbaGameScoreApi repo before running compose:
+    #   cd ../NbaGameScoreApi && docker build -t nba-game-score-api .
+    image: nba-game-score-api:latest
+    restart: unless-stopped
+
+  pi-utilities:
+    image: pi-utilities:latest
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NBA_API_URL=http://nba-api:8000
+    depends_on:
+      - nba-api
+
+networks:
+  default:
+    driver: bridge
+
