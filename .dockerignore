@@ -1,0 +1,10 @@
+# Version control
+.git/
+.gitignore
+
+# Node
+node_modules/
+
+# Docs and tooling
+README.md
+CLAUDE.md

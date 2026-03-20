@@ -8,7 +8,7 @@ const os = require('os');
 const { v4: uuidv4 } = require('uuid');
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 
@@ -16,7 +16,7 @@ app.use(express.json());
 const UPLOAD_DIR  = path.join(__dirname, 'uploads');
 const OUTPUT_DIR  = path.join(__dirname, 'outputs');
 const YOUTUBE_DIR = path.join(__dirname, 'youtube-outputs');
-const NBA_PYTHON   = '/home/pi/nba-watchability/.venv/bin/python';
+const NBA_API_URL  = process.env.NBA_API_URL || 'http://localhost:8000';
 
 [UPLOAD_DIR, OUTPUT_DIR, YOUTUBE_DIR].forEach(dir => {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -53,12 +53,6 @@ function cleanupPath(p) {
   fs.rm(p, { recursive: true, force: true }, () => {});
 }
 
-function isValidNbaDate(s) {
-  if (!/^\d{8}$/.test(s)) return false;
-  const y = +s.slice(0, 4), m = +s.slice(4, 6), d = +s.slice(6, 8);
-  const dt = new Date(y, m - 1, d);
-  return dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d;
-}
 
 // ─── Video → MP3 ─────────────────────────────────────────────────────────────
 
@@ -267,47 +261,32 @@ app.get('/youtube/download/:jobId', (req, res) => {
 
 // ─── NBA Watchability ─────────────────────────────────────────────────────────
 
-app.post('/nba/submit', (req, res) => {
+app.post('/nba/submit', async (req, res) => {
   const { date } = req.body;
-  if (!date || !isValidNbaDate(date))
+  if (!date || !/^\d{8}$/.test(date))
     return res.status(400).json({ error: 'Please provide a valid date in YYYYMMDD format.' });
 
   const jobId = uuidv4();
   jobs[jobId] = { type: 'nba', status: 'processing', date, result: null, error: null, createdAt: Date.now() };
   res.json({ jobId });
 
-  let stdoutBuf = '';
-  let stderrBuf = '';
-  const py = spawn(NBA_PYTHON, ['-m', 'nba_watchability', '--output', 'json', date]);
-
-  py.stdout.on('data', chunk => { stdoutBuf += chunk.toString(); });
-  py.stderr.on('data', chunk => {
-    const text = chunk.toString().trim();
-    stderrBuf += text + '\n';
-    console.error('[nba_watchability]', text);
-  });
-
-  py.on('close', code => {
-    if (code !== 0) {
+  try {
+    const response = await fetch(`${NBA_API_URL}/score/${date}`);
+    if (!response.ok) {
+      let detail = `NBA API returned ${response.status}`;
+      try { const body = await response.json(); if (body.detail) detail = body.detail; } catch (_) {}
       jobs[jobId].status = 'error';
-      jobs[jobId].error  = stderrBuf.trim() || `nba_watchability exited with code ${code}.`;
+      jobs[jobId].error  = detail;
       return;
     }
-    try {
-      const parsed = JSON.parse(stdoutBuf.trim());
-      if (!Array.isArray(parsed)) throw new Error('Expected a JSON array');
-      jobs[jobId].result = parsed;
-      jobs[jobId].status = 'done';
-    } catch (e) {
-      jobs[jobId].status = 'error';
-      jobs[jobId].error  = `Failed to parse output: ${e.message}`;
-    }
-  });
-
-  py.on('error', err => {
+    const parsed = await response.json();
+    if (!Array.isArray(parsed)) throw new Error('Expected a JSON array');
+    jobs[jobId].result = parsed;
+    jobs[jobId].status = 'done';
+  } catch (err) {
     jobs[jobId].status = 'error';
-    jobs[jobId].error  = `Failed to start ${NBA_PYTHON}: ${err.message}. Is the venv set up at /home/pi/nba-watchability/.venv?`;
-  });
+    jobs[jobId].error  = `NBA API request failed: ${err.message}`;
+  }
 });
 
 app.get('/nba/status/:jobId', (req, res) => {

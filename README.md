@@ -46,19 +46,13 @@ Add:
 0 3 * * 0 pip3 install -U yt-dlp --break-system-packages >> /var/log/yt-dlp-update.log 2>&1
 ```
 
-### nba_watchability
+### nba_watchability sidecar API
 
-Copy the `NbaGameScore` project to the Pi and install it into a virtual environment:
+The NBA Watchability page calls a sidecar HTTP service. Set the `NBA_API_URL`
+environment variable to point at it (defaults to `http://localhost:8000`).
 
-```bash
-scp -r ./NbaGameScore pi@192.168.1.69:/home/pi/nba-watchability
-ssh pi@192.168.1.69
-cd /home/pi/nba-watchability
-python3 -m venv .venv
-.venv/bin/pip install -e .
-```
-
-The server expects the venv at `/home/pi/nba-watchability/.venv/bin/python` (configured via `NBA_PYTHON` in `server.js`).
+The sidecar must expose `GET /score/{date}` (date in `YYYYMMDD` format) and
+return a JSON array of game results.
 
 ---
 
