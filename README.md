@@ -67,6 +67,32 @@ cd ../Pi\ Hole\ Utilities && docker build -t pi-utilities .
 docker compose up -d
 ```
 
+### Development workflow
+
+A `docker-compose.override.yml` is provided for local development. It mounts
+`public/` directly from the host filesystem into the container, so changes to
+any file in `public/` (HTML, CSS, JS) are reflected immediately on browser
+refresh — no rebuild required.
+
+The override file is excluded from source control (`.gitignore`) and is only
+active on your dev machine. It is not used in production/Pi deployments.
+
+**What requires a rebuild:**
+
+Changes to files outside `public/` — particularly `server.js`, `package.json`,
+or the `Dockerfile` itself — are baked into the image and require a full
+rebuild to take effect:
+
+```bash
+docker compose down
+docker build -t pi-utilities .
+docker compose up
+```
+
+Note that Docker's layer caching makes rebuilds fast when only `server.js` has
+changed — the dependency install layers will be cached and only the final
+`COPY server.js .` layer will rerun.
+
 ---
 
 ## Installation
