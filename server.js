@@ -399,6 +399,7 @@ app.get('/api/system', async (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Pi utilities running at http://localhost:${PORT}`);
-  console.log(`  Video → MP3:   http://localhost:${PORT}/`);
-  console.log(`  YouTube → MP3: http://localhost:${PORT}/youtube.html`);
+  console.log(`  Video → MP3:       http://localhost:${PORT}/`);
+  console.log(`  YouTube → MP3:     http://localhost:${PORT}/youtube.html`);
+  console.log(`  NBA Watchability:  http://localhost:${PORT}/nba.html`);
 });
