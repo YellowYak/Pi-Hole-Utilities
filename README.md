@@ -11,72 +11,63 @@ Four self-hosted utilities running on your Pi-hole device. (This document assume
 
 ---
 
-## Prerequisites
+## Docker deployment
 
-### Node.js
+The recommended way to run Pi Utilities is via Docker. Two containers are
+managed by `docker-compose.yml`: the Node/Express app (`pi-utilities`) and the
+NBA Watchability scoring API (`nba-game-score-api`).
+
+### First-time Pi setup
+
+**1. Install Docker on the Pi:**
 ```bash
-curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
-sudo apt install -y nodejs
-node --version && npm --version
+curl -fsSL https://get.docker.com | sudo sh
+sudo usermod -aG docker pi
 ```
 
-### ffmpeg
+Log out and back in for the group change to take effect.
+
+**2. Authenticate with GitHub Container Registry:**
 ```bash
-sudo apt install -y ffmpeg
+echo YOUR_GHCR_TOKEN | docker login ghcr.io -u yellowyak --password-stdin
 ```
 
-### yt-dlp
+**3. Clone the repo:**
 ```bash
-sudo apt install -y python3-pip
-sudo pip3 install yt-dlp --break-system-packages
-yt-dlp --version
+git clone https://github.com/YellowYak/Pi-Hole-Utilities.git pi-utilities
+cd pi-utilities
 ```
 
-Keep yt-dlp current — YouTube changes its internals frequently. Update via pip:
+**4. Start the services:**
 ```bash
-sudo pip3 install -U yt-dlp --break-system-packages
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```
 
-To automate this, add a weekly cron job (runs as root, so no sudo prefix needed):
-```bash
-sudo crontab -e
-```
-Add:
-```
-0 3 * * 0 pip3 install -U yt-dlp --break-system-packages >> /var/log/yt-dlp-update.log 2>&1
-```
-
-### nba_watchability sidecar API
-
-The NBA Watchability page calls a sidecar HTTP service. Set the `NBA_API_URL`
-environment variable to point at it (defaults to `http://localhost:8000`).
-
-The sidecar must expose `GET /score/{date}` (date in `YYYYMMDD` format) and
-return a JSON array of game results.
+Docker will pull both images from GitHub Container Registry and start the
+containers. The app will be available at `http://pihole.local:3000`.
 
 ---
 
-## Docker (alternative deployment)
+### Updating to a new version
 
-A `docker-compose.yml` is provided to run both the pi-utilities server and the
-NBA sidecar API as containers. Build the NBA API image first from its own repo:
+After pushing updated images to GHCR, pull and restart on the Pi:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+```
+
+---
+
+### Development workflow (local Windows machine)
+
+Build images locally from sibling repos:
 
 ```bash
 cd ../NbaGameScoreApi && docker build -t nba-game-score-api .
 cd ../Pi\ Hole\ Utilities && docker build -t pi-utilities .
-docker compose up -d
+docker compose up
 ```
-
-### Production deployment (Pi)
-
-On the Pi, use `docker-compose.prod.yml` to pull pre-built images from the
-GitHub Container Registry instead of building locally:
-
-```bash
-docker compose -f docker-compose.prod.yml up -d
-```
-
-### Development workflow
 
 A `docker-compose.override.yml` is provided for local development. It mounts
 `public/` directly from the host filesystem into the container, so changes to
@@ -98,45 +89,28 @@ docker build -t pi-utilities .
 docker compose up
 ```
 
-Note that Docker's layer caching makes rebuilds fast when only `server.js` has
-changed — the dependency install layers will be cached and only the final
+Docker's layer caching makes rebuilds fast when only `server.js` has changed —
+the dependency install layers will be cached and only the final
 `COPY server.js .` layer will rerun.
 
----
+**Publishing updated images to GHCR (multi-platform):**
 
-## Installation
+Both `amd64` (dev machine) and `arm64` (Pi) variants must be built and pushed
+together using `buildx`:
 
 ```bash
-scp -r ./video-converter pi@192.168.1.69:/home/pi/video-converter
-ssh pi@192.168.1.69
-cd /home/pi/video-converter
-npm install
+docker buildx build \
+  --platform linux/amd64,linux/arm64 \
+  -t ghcr.io/yellowyak/pi-utilities:latest \
+  --push .
 ```
 
 ---
 
-## Test manually first
+### Logs
 
 ```bash
-node server.js
-```
-
-Verify all pages work before setting up the service:
-- http://pihole.local:3000/ — Dashboard with system stats
-- http://pihole.local:3000/video.html — upload a video, verify MP3 download works
-- http://pihole.local:3000/youtube.html — paste a YouTube URL, verify MP3/ZIP download works
-- http://pihole.local:3000/nba.html — enter a past date, verify game scores load
-
----
-
-## Set up as a systemd service (auto-start on boot)
-
-```bash
-sudo cp /home/pi/video-converter/video-converter.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable video-converter
-sudo systemctl start video-converter
-sudo systemctl status video-converter
+docker compose -f docker-compose.yml -f docker-compose.prod.yml logs -f
 ```
 
 ---
@@ -161,12 +135,4 @@ $HTTP["url"] =~ "^/mysite" {
 
 ```bash
 sudo service lighttpd restart
-```
-
----
-
-## Logs
-
-```bash
-sudo journalctl -u video-converter -f
 ```
