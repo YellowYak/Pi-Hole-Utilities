@@ -67,6 +67,15 @@ cd ../Pi\ Hole\ Utilities && docker build -t pi-utilities .
 docker compose up -d
 ```
 
+### Production deployment (Pi)
+
+On the Pi, use `docker-compose.prod.yml` to pull pre-built images from the
+GitHub Container Registry instead of building locally:
+
+```bash
+docker compose -f docker-compose.prod.yml up -d
+```
+
 ### Development workflow
 
 A `docker-compose.override.yml` is provided for local development. It mounts

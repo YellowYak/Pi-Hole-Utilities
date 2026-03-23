@@ -1,0 +1,6 @@
+# On production, pull the services from the GitHub Container Repository
+services:
+  nba-api:
+    image: ghcr.io/yellowyak/nba-game-score-api:latest
+  pi-utilities:
+    image: ghcr.io/yellowyak/pi-utilities:latest
