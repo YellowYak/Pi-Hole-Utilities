@@ -13,6 +13,9 @@ services:
       - "3000:3000"
     environment:
       - NBA_API_URL=http://nba-api:8000
+      - SHARED_DIR=/shared
+    volumes:
+      - /home/pi/shared:/shared:ro
     depends_on:
       - nba-api
 

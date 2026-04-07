@@ -319,8 +319,7 @@ function execPromise(cmd) {
 
 app.get('/api/system', async (req, res) => {
   try {
-    const homeDir    = os.homedir();
-    const sharedDir  = path.join(homeDir, 'shared');
+    const sharedDir  = process.env.SHARED_DIR || path.join(os.homedir(), 'shared');
 
     // Memory (from /proc/meminfo for accuracy)
     const memTotal = os.totalmem();

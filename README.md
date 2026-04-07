@@ -105,6 +105,13 @@ docker buildx build \
   --push .
 ```
 
+> **Troubleshooting:** If the build fails with `exec format error` on `linux/arm64`,
+> the active buildx builder may be using the `docker` driver, which doesn't support
+> cross-platform builds. Fix it by creating a proper builder:
+> ```bash
+> docker buildx create --use --bootstrap
+> ```
+
 ---
 
 ### Logs

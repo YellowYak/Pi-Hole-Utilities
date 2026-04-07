@@ -4,3 +4,7 @@ services:
     image: ghcr.io/yellowyak/nba-game-score-api:latest
   pi-utilities:
     image: ghcr.io/yellowyak/pi-utilities:latest
+    environment:
+      - SHARED_DIR=/shared
+    volumes:
+      - /home/pi/shared:/shared:ro
