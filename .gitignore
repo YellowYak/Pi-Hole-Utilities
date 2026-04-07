@@ -1,2 +1,10 @@
 # Ignore docker-compose.override.yml, as this is used solely for the dev environment
 docker-compose.override.yml
+
+node_modules/
+
+# Local secrets — never commit
+.env
+
+# Podcast runtime data — audio files, thumbnails, feed
+podcast/

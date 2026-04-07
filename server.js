@@ -40,6 +40,7 @@ const upload = multer({
 const jobs = {};
 
 app.use(express.static(path.join(__dirname, 'public')));
+app.use('/podcast', require('./routes/podcast'));
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -401,4 +402,5 @@ app.listen(PORT, () => {
   console.log(`  Video → MP3:       http://localhost:${PORT}/`);
   console.log(`  YouTube → MP3:     http://localhost:${PORT}/youtube.html`);
   console.log(`  NBA Watchability:  http://localhost:${PORT}/nba.html`);
+  console.log(`  Podcast:           http://localhost:${PORT}/podcast.html`);
 });

@@ -8,6 +8,7 @@ Four self-hosted utilities running on your Pi-hole device. (This document assume
 | Video → MP3 | http://pihole.local:3000/video.html |
 | YouTube → MP3 | http://pihole.local:3000/youtube.html |
 | NBA Watchability | http://pihole.local:3000/nba.html |
+| Podcast | http://pihole.local:3000/podcast.html |
 
 ---
 
@@ -53,9 +54,21 @@ containers. The app will be available at `http://pihole.local:3000`.
 After pushing updated images to GHCR, pull and restart on the Pi:
 
 ```bash
+git pull   # picks up any compose file changes
 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```
+
+**First-time secrets setup:** The podcast feature reads R2 credentials from a
+`.env` file in the project root (never committed). Copy the template and fill
+in your values once on the Pi:
+
+```bash
+cp .env.example .env
+nano .env
+```
+
+Docker Compose reads `.env` automatically — no extra flags needed.
 
 ---
 

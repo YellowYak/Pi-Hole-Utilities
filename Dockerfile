@@ -23,6 +23,7 @@ RUN npm ci --omit=dev
 
 # Copy over the germane files
 COPY public/ ./public/
+COPY routes/ ./routes/
 COPY server.js .
 
 EXPOSE $PORT
