@@ -323,44 +323,45 @@ router.post('/deploy', async (req, res) => {
   const episodes = readEpisodes();
   writeFeed(episodes); // regenerate before deploy to ensure freshness
 
-  // Always upload: feed.xml + all thumbnails
+  // Always upload: feed.xml (changes every deploy)
   const alwaysUpload = [];
 
   if (fs.existsSync(FEED_FILE)) {
     alwaysUpload.push({ localPath: FEED_FILE, key: 'feed.xml', contentType: 'application/rss+xml' });
   }
 
+  // Conditional upload: thumbnails + MP3s only if not already in R2
+  const conditionalCandidates = [];
+
   for (const ep of episodes) {
     const thumbPath = path.join(THUMBS_DIR, `${ep.id}.jpg`);
     if (ep.thumbFile && fs.existsSync(thumbPath)) {
-      alwaysUpload.push({ localPath: thumbPath, key: `thumbs/${ep.id}.jpg`, contentType: 'image/jpeg' });
+      conditionalCandidates.push({ localPath: thumbPath, key: `thumbs/${ep.id}.jpg`, contentType: 'image/jpeg' });
     }
   }
 
-  // Conditional upload: MP3s only if not already in R2
-  const mp3Candidates = episodes
-    .map(ep => ({
-      localPath: path.join(AUDIO_DIR, `${ep.id}.mp3`),
-      key: `audio/${ep.id}.mp3`,
-      contentType: 'audio/mpeg',
-    }))
-    .filter(f => fs.existsSync(f.localPath));
+  for (const ep of episodes) {
+    const mp3Path = path.join(AUDIO_DIR, `${ep.id}.mp3`);
+    if (fs.existsSync(mp3Path)) {
+      conditionalCandidates.push({ localPath: mp3Path, key: `audio/${ep.id}.mp3`, contentType: 'audio/mpeg' });
+    }
+  }
 
-  sseSend(res, { type: 'progress', phase: 'checking', total: mp3Candidates.length, checked: 0 });
+  sseSend(res, { type: 'progress', phase: 'checking', total: conditionalCandidates.length, checked: 0 });
 
-  const mp3ToUpload = [];
+  const toUpload = [];
   let skipped = 0;
 
-  for (let i = 0; i < mp3Candidates.length; i++) {
-    const f = mp3Candidates[i];
-    sseSend(res, { type: 'progress', phase: 'checking', file: f.key, checked: i + 1, total: mp3Candidates.length });
+  for (let i = 0; i < conditionalCandidates.length; i++) {
+    const f = conditionalCandidates[i];
+    sseSend(res, { type: 'progress', phase: 'checking', file: f.key, checked: i + 1, total: conditionalCandidates.length });
     try {
       await client.send(new HeadObjectCommand({ Bucket: bucket, Key: f.key }));
       skipped++; // exists in R2 — skip
     } catch (err) {
       const status = err.$metadata?.httpStatusCode;
       if (status === 404 || err.name === 'NotFound') {
-        mp3ToUpload.push(f); // not in R2 — upload
+        toUpload.push(f); // not in R2 — upload
       } else {
         sseSend(res, { type: 'error', message: `R2 check failed for ${f.key}: ${err.message}` });
         return sseEnd(res);
@@ -368,7 +369,7 @@ router.post('/deploy', async (req, res) => {
     }
   }
 
-  const uploadList = [...alwaysUpload, ...mp3ToUpload];
+  const uploadList = [...alwaysUpload, ...toUpload];
   sseSend(res, { type: 'progress', phase: 'uploading', total: uploadList.length, uploaded: 0 });
 
   for (let i = 0; i < uploadList.length; i++) {

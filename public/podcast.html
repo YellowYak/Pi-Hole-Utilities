@@ -434,10 +434,6 @@
       <div class="result-msg" id="addErrorMsg"></div>
     </div>
 
-    <!-- Episode List -->
-    <div class="section-label">Episodes</div>
-    <div id="episodeList"><div class="empty-state">Loading...</div></div>
-
     <!-- Deploy -->
     <div class="section-label">Publish</div>
     <div class="deploy-card">
@@ -448,6 +444,10 @@
     <div class="progress-section" id="deployProgress">
       <div class="deploy-log" id="deployLog"></div>
     </div>
+
+    <!-- Episode List -->
+    <div class="section-label">Episodes</div>
+    <div id="episodeList"><div class="empty-state">Loading...</div></div>
 
   </div>
 
@@ -498,6 +498,9 @@
 
     function renderEpisodeCard(ep) {
       const dur = ep.durationSeconds ? formatDuration(ep.durationSeconds) : '—';
+      const date = ep.pubDate
+        ? new Date(ep.pubDate).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+        : '—';
       return `
         <div class="episode-card" data-id="${ep.id}">
           <img class="episode-thumb"
@@ -506,7 +509,7 @@
                onerror="this.style.display='none'" />
           <div class="episode-meta">
             <div class="episode-title" title="${ep.title.replace(/"/g, '&quot;')}">${ep.title}</div>
-            <div class="episode-duration">${dur}</div>
+            <div class="episode-duration">${date} · ${dur}</div>
           </div>
           <button class="btn-remove" data-id="${ep.id}">Remove</button>
         </div>`;
@@ -525,6 +528,7 @@
       try {
         const res = await fetch('/podcast/episodes');
         const eps = await res.json();
+        eps.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
         renderEpisodeList(eps);
       } catch (e) {
         document.getElementById('episodeList').innerHTML =
