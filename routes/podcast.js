@@ -93,6 +93,23 @@ function writeFeed(episodes) {
   fs.writeFileSync(FEED_FILE, generateFeed(episodes), 'utf8');
 }
 
+async function uploadFeedToR2() {
+  const client = getR2Client();
+  const bucket = process.env.R2_BUCKET_NAME;
+  if (!client || !bucket || !fs.existsSync(FEED_FILE)) return;
+  try {
+    const body = fs.readFileSync(FEED_FILE);
+    await client.send(new PutObjectCommand({
+      Bucket: bucket,
+      Key: 'feed.xml',
+      Body: body,
+      ContentType: 'application/rss+xml',
+    }));
+  } catch (err) {
+    console.error('[podcast] R2 feed upload failed:', err.message);
+  }
+}
+
 function sseSetup(res) {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -267,6 +284,7 @@ router.post('/episodes', (req, res) => {
     const episodes = [episode, ...readEpisodes()];
     writeEpisodes(episodes);
     writeFeed(episodes);
+    await uploadFeedToR2();
 
     sseSend(res, { type: 'done', episode });
     sseEnd(res);
@@ -303,6 +321,7 @@ router.delete('/episodes/:id', async (req, res) => {
   const updated = episodes.filter(e => e.id !== id);
   writeEpisodes(updated);
   writeFeed(updated);
+  await uploadFeedToR2();
 
   res.json({ ok: true });
 });
