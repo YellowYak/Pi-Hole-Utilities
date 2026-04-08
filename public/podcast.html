@@ -437,8 +437,8 @@
     <!-- Deploy -->
     <div class="section-label">Publish</div>
     <div class="deploy-card">
-      <div class="deploy-desc">Upload feed.xml, thumbnails, and new MP3s to Cloudflare R2</div>
-      <button class="btn-deploy" id="btnDeploy">↑ Deploy to R2</button>
+      <div class="deploy-desc">Force update feed.xml, thumbnails, and MP3s to Cloudflare R2</div>
+      <button class="btn-deploy" id="btnDeploy">↑ Force Deploy to R2</button>
     </div>
 
     <div class="progress-section" id="deployProgress">
@@ -446,7 +446,7 @@
     </div>
 
     <!-- Episode List -->
-    <div class="section-label">Episodes</div>
+    <div class="section-label" id="episodesLabel">Episodes</div>
     <div id="episodeList"><div class="empty-state">Loading...</div></div>
 
   </div>
@@ -517,6 +517,7 @@
 
     function renderEpisodeList(episodes) {
       const el = document.getElementById('episodeList');
+      document.getElementById('episodesLabel').textContent = `Episodes (${episodes.length})`;
       if (!episodes.length) {
         el.innerHTML = '<div class="empty-state">No episodes yet. Add one above.</div>';
         return;
@@ -540,15 +541,23 @@
 
     async function handleRemove(id) {
       if (!confirm('Remove this episode? The local files will be deleted and the feed updated.')) return;
+      const card = document.querySelector(`.episode-card[data-id="${id}"]`);
+      const btn  = card && card.querySelector('.btn-remove');
+      if (btn) { btn.disabled = true; btn.textContent = 'Removing…'; }
+      if (card) card.style.opacity = '0.4';
       try {
         const res = await fetch(`/podcast/episodes/${id}`, { method: 'DELETE' });
         if (!res.ok) {
           const data = await res.json();
+          if (btn) { btn.disabled = false; btn.textContent = 'Remove'; }
+          if (card) card.style.opacity = '';
           alert(`Remove failed: ${data.error || res.status}`);
           return;
         }
         loadEpisodes();
       } catch (e) {
+        if (btn) { btn.disabled = false; btn.textContent = 'Remove'; }
+        if (card) card.style.opacity = '';
         alert(`Network error: ${e.message}`);
       }
     }
