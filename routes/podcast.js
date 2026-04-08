@@ -84,7 +84,7 @@ function generateFeed(episodes) {
     <language>en-us</language>
     <itunes:author>${escapeXml(author)}</itunes:author>
     <itunes:explicit>no</itunes:explicit>
-    <itunes:image href="${base}/artwork.jpg"/>${items}
+    <itunes:image href="https://pub-c328e66e61d940b59da4f2b4c1ecf308.r2.dev/podcast-artwork.png"/>${items}
   </channel>
 </rss>`;
 }
