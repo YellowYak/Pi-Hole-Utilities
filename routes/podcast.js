@@ -323,22 +323,30 @@ async function syncChannel(channel) {
   writeChannels(ch);
 
   const name = ch[idx].name;
-  const dateAfter = ch[idx].lastCheckedAt.slice(0, 10).replace(/-/g, '');
+  const lastSynced = ch[idx].lastSyncedAt;
+  const dateAfter = lastSynced
+    ? lastSynced.slice(0, 10).replace(/-/g, '')
+    : new Date().toISOString().slice(0, 10).replace(/-/g, '');
+
+  syncLog('info', `[channel:${channel.id}] sync start url=${channel.url} dateAfter=${dateAfter} lastSyncedAt=${lastSynced || 'null'}`);
 
   try {
-    const videoIds = await new Promise((resolve, reject) => {
-      const proc = spawn('yt-dlp', [
-        '--flat-playlist', '--get-id', '--dateafter', dateAfter, channel.url,
-      ]);
+    const ytdlpListArgs = ['--playlist-end', '5', '--get-id', '--dateafter', dateAfter, channel.url];
+    syncLog('info', `[channel:${channel.id}] yt-dlp ${ytdlpListArgs.join(' ')}`);
+    const { listExitCode, videoIds } = await new Promise((resolve, reject) => {
+      const proc = spawn('yt-dlp', ytdlpListArgs);
       let out = '';
       proc.stdout.on('data', d => { out += d.toString(); });
       proc.stderr.on('data', d => console.error('[sync yt-dlp]', d.toString().trim()));
       proc.on('error', err => reject(new Error(`yt-dlp spawn failed: ${err.message}`)));
-      proc.on('close', () => resolve(out.split('\n').map(s => s.trim()).filter(Boolean)));
+      proc.on('close', code => {
+        const ids = out.split('\n').map(s => s.trim()).filter(Boolean);
+        resolve({ listExitCode: code, videoIds: ids });
+      });
     });
+    syncLog('info', `[channel:${channel.id}] yt-dlp exit:${listExitCode} ids=${videoIds.length > 0 ? videoIds.join(',') : 'none'}`);
 
     if (videoIds.length === 0) {
-      syncLog('info', `No new videos for ${name}`);
       ch = readChannels(); idx = ch.findIndex(c => c.id === channel.id);
       if (idx !== -1) { ch[idx] = { ...ch[idx], status: 'idle' }; writeChannels(ch); }
       return;
@@ -347,9 +355,7 @@ async function syncChannel(channel) {
     const existingIds = new Set(readEpisodes().map(e => e.youtubeId).filter(Boolean));
     const newIds = videoIds.filter(vid => !existingIds.has(vid));
 
-    if (newIds.length < videoIds.length) {
-      syncLog('info', `Found ${newIds.length} new video(s) for ${name} (${videoIds.length - newIds.length} already exist, skipping)`);
-    }
+    syncLog('info', `[channel:${channel.id}] dedup: ${newIds.length} new, ${videoIds.length - newIds.length} already in episodes`);
 
     if (newIds.length === 0) {
       ch = readChannels(); idx = ch.findIndex(c => c.id === channel.id);
@@ -360,11 +366,12 @@ async function syncChannel(channel) {
     const downloaded = [];
     for (const videoId of newIds) {
       try {
+        syncLog('info', `[channel:${channel.id}] download start youtubeId=${videoId}`);
         const ep = await downloadAndAddEpisode(`https://www.youtube.com/watch?v=${videoId}`, channel.id);
-        syncLog('info', `Added: ${ep.title} (${name})`);
+        syncLog('info', `[channel:${channel.id}] download ok episodeId=${ep.id} youtubeId=${ep.youtubeId} duration=${ep.durationSeconds}s size=${ep.fileSizeBytes}B title="${ep.title}"`);
         downloaded.push(ep);
       } catch (err) {
-        syncLog('error', `Failed to download ${videoId} for ${name}: ${err.message}`);
+        syncLog('error', `[channel:${channel.id}] download failed youtubeId=${videoId}: ${err.message}`);
         ch = readChannels(); idx = ch.findIndex(c => c.id === channel.id);
         if (idx !== -1) {
           ch[idx] = { ...ch[idx], errorCount: (ch[idx].errorCount || 0) + 1 };
@@ -383,6 +390,7 @@ async function syncChannel(channel) {
       await uploadEpisodeFilesToR2(ep.id, !!ep.thumbFile);
     }
     await uploadFeedToR2();
+    syncLog('info', `[channel:${channel.id}] sync complete: ${downloaded.length}/${newIds.length} downloaded, R2 upload done`);
 
   } catch (err) {
     ch = readChannels(); idx = ch.findIndex(c => c.id === channel.id);
@@ -400,7 +408,7 @@ async function syncAllChannels() {
     try {
       await syncChannel(ch);
     } catch (err) {
-      syncLog('error', `syncChannel failed for ${ch.name}: ${err.message}`);
+      syncLog('error', `[channel:${ch.id}] syncChannel threw: ${err.message}`);
     }
   }
 }
@@ -617,7 +625,7 @@ router.get('/channels', (req, res) => {
 });
 
 router.post('/channels/sync', (req, res) => {
-  syncAllChannels().catch(err => syncLog('error', `Manual sync failed: ${err.message}`));
+  syncAllChannels().catch(err => syncLog('error', `trigger=manual syncAllChannels threw: ${err.message}`));
   res.json({ ok: true, message: 'Sync started' });
 });
 
@@ -746,17 +754,18 @@ const cron = require('node-cron');
 
 // Channel sync — every 4 hours
 cron.schedule('0 */4 * * *', () => {
-  syncLog('info', 'Scheduled sync started');
-  syncAllChannels().catch(err => syncLog('error', `Sync job failed: ${err.message}`));
+  syncLog('info', 'trigger=cron sync start');
+  syncAllChannels().catch(err => syncLog('error', `trigger=cron syncAllChannels threw: ${err.message}`));
 });
 
 // yt-dlp self-update — Sundays at 3am
 cron.schedule('0 3 * * 0', () => {
-  syncLog('info', 'yt-dlp self-update started');
+  const cmd = 'pip3 install -U yt-dlp --break-system-packages';
+  syncLog('info', `yt-dlp update: ${cmd}`);
   const { exec } = require('child_process');
-  exec('pip3 install -U yt-dlp --break-system-packages', (err, _stdout, stderr) => {
-    if (err) syncLog('error', `yt-dlp update failed: ${stderr.trim()}`);
-    else syncLog('info', 'yt-dlp updated successfully');
+  exec(cmd, (err, _stdout, stderr) => {
+    if (err) syncLog('error', `yt-dlp update failed exit:${err.code}: ${stderr.trim()}`);
+    else syncLog('info', 'yt-dlp update ok');
   });
 });
 
