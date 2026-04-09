@@ -1,6 +1,6 @@
 # Pi Utilities
 
-Four self-hosted utilities running on your Pi-hole device. (This document assumes the Pi-hole device is accessible on the local network via IP address 192.168.1.69 and/or the domain name `pihole.local`. Update the instructions below to use whatever IP address and/or domain name that is applicable for the Pi-hole on your network.)
+Five self-hosted utilities running on your Pi-hole device. (This document assumes the Pi-hole device is accessible on the local network via IP address 192.168.1.69 and/or the domain name `pihole.local`. Update the instructions below to use whatever IP address and/or domain name that is applicable for the Pi-hole on your network.)
 
 | Page | URL |
 |---|---|
