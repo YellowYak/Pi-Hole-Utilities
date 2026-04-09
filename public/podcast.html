@@ -388,6 +388,50 @@
     .deploy-log .log-done    { color: var(--success); }
     .deploy-log .log-error   { color: var(--error); }
     .deploy-log .log-summary { color: var(--text-bright); margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
+
+    /* ─── Tabs ──────────────────────────────────────────────────────────────── */
+    .tab-bar { display: flex; gap: 6px; margin-bottom: 24px; }
+    .tab-btn {
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      background: none;
+      border: 1.5px solid var(--border);
+      border-radius: 4px;
+      color: var(--text-dim);
+      padding: 6px 14px;
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .tab-btn:hover { color: var(--text); border-color: var(--text-dim); }
+    .tab-btn.active { border-color: var(--accent); color: var(--accent); }
+    .tab-pane.hidden { display: none; }
+
+    /* ─── Source badges ─────────────────────────────────────────────────────── */
+    .source-badge {
+      display: inline-block;
+      font-family: var(--mono);
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 3px;
+      margin-top: 3px;
+      margin-bottom: 2px;
+    }
+    .source-badge.channel { background: var(--accent-dim); color: var(--accent); }
+    .source-badge.manual  { background: rgba(255,255,255,0.05); color: var(--text-dim); }
+
+    /* ─── Channel list ──────────────────────────────────────────────────────── */
+    .ch-url { font-family: var(--mono); font-size: 11px; color: var(--text-dim); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ch-status { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+    .status-badge { font-family: var(--mono); font-size: 10px; padding: 2px 6px; border-radius: 3px; }
+    .badge-idle    { background: rgba(255,255,255,0.05); color: var(--text-dim); }
+    .badge-syncing { background: var(--accent-dim); color: var(--accent); animation: pulse 1.4s ease-in-out infinite; }
+    .badge-error   { background: var(--error-dim); color: var(--error); }
+    .ch-error-count { font-family: var(--mono); font-size: 10px; color: var(--error); }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+    .log-line-warn  { color: #f5a623; }
+    .log-line-error { color: var(--error); }
   </style>
 </head>
 <body>
@@ -406,6 +450,13 @@
       <h1>pod<span>cast</span></h1>
       <p class="subtitle">Download YouTube audio and publish a podcast feed</p>
     </header>
+
+    <div class="tab-bar">
+      <button class="tab-btn active" data-tab="episodes">Episodes</button>
+      <button class="tab-btn" data-tab="channels">Channels</button>
+    </div>
+
+    <div class="tab-pane" id="tab-episodes">
 
     <!-- Add Episode -->
     <div class="input-card">
@@ -448,6 +499,37 @@
     <!-- Episode List -->
     <div class="section-label" id="episodesLabel">Episodes</div>
     <div id="episodeList"><div class="empty-state">Loading...</div></div>
+
+    </div><!-- /tab-episodes -->
+
+    <div class="tab-pane hidden" id="tab-channels">
+
+      <div class="input-card">
+        <div class="input-label">Add Channel</div>
+        <div class="url-row">
+          <input class="url-input" id="channelUrl" type="text" placeholder="https://www.youtube.com/@ChannelName" autocomplete="off" />
+          <button class="btn-go" id="btnAddChannel">+ Add</button>
+        </div>
+      </div>
+
+      <div class="result-box" id="channelAddError">
+        <div class="result-title">✗ Failed</div>
+        <div class="result-msg" id="channelAddErrorMsg"></div>
+      </div>
+
+      <div class="section-label" id="channelsLabel">Channels</div>
+      <div id="channelList"><div class="empty-state">Loading...</div></div>
+
+      <div class="section-label">Sync Log</div>
+      <div class="input-card" style="padding:0;">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px 10px;">
+          <span style="font-family:var(--mono);font-size:11px;color:var(--text-dim);letter-spacing:0.1em;text-transform:uppercase;">Recent Activity</span>
+          <button class="btn-deploy" id="btnRefreshLog" style="padding:5px 12px;font-size:11px;">↺ Refresh</button>
+        </div>
+        <div class="deploy-log" id="syncLog" style="padding:0 16px 14px;max-height:300px;"></div>
+      </div>
+
+    </div><!-- /tab-channels -->
 
   </div>
 
@@ -501,6 +583,9 @@
       const date = ep.pubDate
         ? new Date(ep.pubDate).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
         : '—';
+      const badge = (ep.source === 'channel' && ep.channelId)
+        ? `<span class="source-badge channel">📡 ${getChannelName(ep.channelId)}</span>`
+        : `<span class="source-badge manual">✋ Manual</span>`;
       return `
         <div class="episode-card" data-id="${ep.id}">
           <img class="episode-thumb"
@@ -509,6 +594,7 @@
                onerror="this.style.display='none'" />
           <div class="episode-meta">
             <div class="episode-title" title="${ep.title.replace(/"/g, '&quot;')}">${ep.title}</div>
+            ${badge}
             <div class="episode-duration">${date} · ${dur}</div>
           </div>
           <button class="btn-remove" data-id="${ep.id}">Remove</button>
@@ -689,9 +775,192 @@
 
     btnDeploy.addEventListener('click', handleDeploy);
 
+    // ─── Channels ─────────────────────────────────────────────────────────────
+
+    let channels = [];
+
+    function getChannelName(id) {
+      const ch = channels.find(c => c.id === id);
+      return ch ? ch.name : 'Unknown Channel';
+    }
+
+    function relTime(ts) {
+      if (!ts) return 'Never';
+      const diff = Date.now() - new Date(ts).getTime();
+      const mins = Math.floor(diff / 60000);
+      if (mins < 1) return 'Just now';
+      if (mins < 60) return `${mins}m ago`;
+      const hours = Math.floor(mins / 60);
+      if (hours < 24) return `${hours}h ago`;
+      return `${Math.floor(hours / 24)}d ago`;
+    }
+
+    function renderChannelCard(ch) {
+      const statusCls = { idle: 'badge-idle', syncing: 'badge-syncing', error: 'badge-error' }[ch.status] || 'badge-idle';
+      return `
+        <div class="episode-card" data-id="${ch.id}">
+          <div class="episode-meta">
+            <div class="episode-title">${ch.name}</div>
+            <div class="ch-url">${ch.url}</div>
+            <div class="ch-status">
+              <span class="status-badge ${statusCls}">${ch.status}</span>
+              ${ch.errorCount > 0 ? `<span class="ch-error-count">${ch.errorCount} err</span>` : ''}
+            </div>
+            <div class="episode-duration" style="margin-top:3px;">Checked: ${relTime(ch.lastCheckedAt)} · Synced: ${relTime(ch.lastSyncedAt)}</div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0;">
+            <button class="btn-remove btn-sync-now" data-id="${ch.id}">Sync</button>
+            <button class="btn-remove btn-remove-channel" data-id="${ch.id}">Remove</button>
+          </div>
+        </div>`;
+    }
+
+    function renderChannelList() {
+      const el    = document.getElementById('channelList');
+      const label = document.getElementById('channelsLabel');
+      if (label) label.textContent = `Channels (${channels.length})`;
+      if (!channels.length) {
+        el.innerHTML = '<div class="empty-state">No channels yet. Add one above.</div>';
+        return;
+      }
+      el.innerHTML = `<div class="episode-list">${channels.map(renderChannelCard).join('')}</div>`;
+    }
+
+    async function loadChannels() {
+      try {
+        const r = await fetch('/podcast/channels');
+        channels = await r.json();
+        renderChannelList();
+      } catch { channels = []; }
+    }
+
+    function renderSyncLog(entries) {
+      const el = document.getElementById('syncLog');
+      if (!entries.length) {
+        el.innerHTML = '<span style="color:var(--text-dim)">No log entries yet.</span>';
+        return;
+      }
+      el.innerHTML = entries.map(e => {
+        const ts = new Date(e.ts).toLocaleString('en-US', {
+          month: 'numeric', day: 'numeric',
+          hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+        });
+        const cls = e.level === 'error' ? 'log-line-error' : e.level === 'warn' ? 'log-line-warn' : '';
+        return `<div class="${cls}">[${ts}] ${e.level.padEnd(5)} ${e.message}</div>`;
+      }).join('');
+      el.scrollTop = el.scrollHeight;
+    }
+
+    async function loadSyncLog() {
+      try {
+        const r = await fetch('/podcast/sync-log');
+        renderSyncLog(await r.json());
+      } catch {}
+    }
+
+    async function handleAddChannel() {
+      const input = document.getElementById('channelUrl');
+      const btn   = document.getElementById('btnAddChannel');
+      const url   = input.value.trim();
+      if (!url) return;
+
+      document.getElementById('channelAddError').className = 'result-box';
+      btn.disabled    = true;
+      btn.textContent = 'Resolving...';
+
+      try {
+        const r = await fetch('/podcast/channels', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url }),
+        });
+        const data = await r.json();
+        if (!r.ok) {
+          document.getElementById('channelAddError').className = 'result-box error';
+          document.getElementById('channelAddErrorMsg').textContent = data.error || 'Failed to add channel';
+        } else {
+          input.value = '';
+          await loadChannels();
+        }
+      } catch (e) {
+        document.getElementById('channelAddError').className = 'result-box error';
+        document.getElementById('channelAddErrorMsg').textContent = `Network error: ${e.message}`;
+      } finally {
+        btn.disabled    = false;
+        btn.textContent = '+ Add';
+      }
+    }
+
+    async function handleRemoveChannel(id) {
+      if (!confirm('Remove this channel? Existing episodes from this channel will remain in the feed.')) return;
+      try {
+        await fetch(`/podcast/channels/${id}`, { method: 'DELETE' });
+        await loadChannels();
+      } catch (e) {
+        alert(`Failed to remove channel: ${e.message}`);
+      }
+    }
+
+    async function handleSyncNow() {
+      try { await fetch('/podcast/channels/sync', { method: 'POST' }); } catch {}
+      let polls = 0;
+      const fastPoll = setInterval(async () => {
+        await loadChannels();
+        polls++;
+        if (!channels.some(c => c.status === 'syncing') || polls >= 30) {
+          clearInterval(fastPoll);
+          loadSyncLog();
+        }
+      }, 2000);
+    }
+
+    document.getElementById('channelList').addEventListener('click', e => {
+      const syncBtn   = e.target.closest('.btn-sync-now');
+      const removeBtn = e.target.closest('.btn-remove-channel');
+      if (syncBtn)   handleSyncNow();
+      if (removeBtn) handleRemoveChannel(removeBtn.dataset.id);
+    });
+
+    document.getElementById('btnAddChannel').addEventListener('click', handleAddChannel);
+    document.getElementById('channelUrl').addEventListener('keydown', e => {
+      if (e.key === 'Enter') document.getElementById('btnAddChannel').click();
+    });
+    document.getElementById('btnRefreshLog').addEventListener('click', loadSyncLog);
+
+    // ─── Tab switching ────────────────────────────────────────────────────────
+
+    let channelsPoller = null;
+
+    function startChannelsPolling() {
+      loadChannels();
+      loadSyncLog();
+      if (!channelsPoller) {
+        channelsPoller = setInterval(() => { loadChannels(); loadSyncLog(); }, 30000);
+      }
+    }
+
+    function stopChannelsPolling() {
+      if (channelsPoller) { clearInterval(channelsPoller); channelsPoller = null; }
+    }
+
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-pane').forEach(p => p.classList.add('hidden'));
+        btn.classList.add('active');
+        document.getElementById('tab-' + btn.dataset.tab).classList.remove('hidden');
+        if (btn.dataset.tab === 'channels') startChannelsPolling();
+        else stopChannelsPolling();
+      });
+    });
+
     // ─── Init ─────────────────────────────────────────────────────────────────
 
-    loadEpisodes();
+    async function init() {
+      await loadChannels();
+      loadEpisodes();
+    }
+    init();
   </script>
 </body>
 </html>
