@@ -227,8 +227,8 @@ function syncLog(level, message) {
   if (level === 'error') console.error(`[sync] ${message}`);
   else console.log(`[sync] ${message}`);
   const entries = readSyncLog();
-  entries.push({ ts: new Date().toISOString(), level, message });
-  fs.writeFileSync(SYNC_LOG_FILE, JSON.stringify(entries.slice(-100), null, 2), 'utf8');
+  entries.unshift({ ts: new Date().toISOString(), level, message });
+  fs.writeFileSync(SYNC_LOG_FILE, JSON.stringify(entries.slice(0, 100), null, 2), 'utf8');
 }
 
 async function resolveChannelName(url) {
@@ -572,6 +572,39 @@ router.delete('/episodes/:id', async (req, res) => {
   const updated = episodes.filter(e => e.id !== id);
   writeEpisodes(updated);
   writeFeed(updated);
+  await uploadFeedToR2();
+
+  res.json({ ok: true });
+});
+
+// ─── DELETE /episodes (all) ───────────────────────────────────────────────────
+
+router.delete('/episodes', async (req, res) => {
+  const episodes = readEpisodes();
+
+  for (const ep of episodes) {
+    fs.rm(path.join(AUDIO_DIR,  `${ep.id}.mp3`), { force: true }, () => {});
+    fs.rm(path.join(THUMBS_DIR, `${ep.id}.jpg`), { force: true }, () => {});
+  }
+
+  const client = getR2Client();
+  const bucket = process.env.R2_BUCKET_NAME;
+  if (client && bucket) {
+    for (const ep of episodes) {
+      for (const key of [`audio/${ep.id}.mp3`, `thumbs/${ep.id}.jpg`]) {
+        try {
+          await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
+        } catch (err) {
+          if (err.$metadata?.httpStatusCode !== 404 && err.name !== 'NotFound') {
+            console.error(`[podcast] R2 delete failed for ${key}:`, err.message);
+          }
+        }
+      }
+    }
+  }
+
+  writeEpisodes([]);
+  writeFeed([]);
   await uploadFeedToR2();
 
   res.json({ ok: true });

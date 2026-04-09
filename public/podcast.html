@@ -497,7 +497,10 @@
     </div>
 
     <!-- Episode List -->
-    <div class="section-label" id="episodesLabel">Episodes</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:32px;margin-bottom:12px;">
+      <div class="section-label" id="episodesLabel" style="margin:0;">Episodes</div>
+      <button class="btn-remove" id="btnRemoveAll" style="display:none;">Remove All</button>
+    </div>
     <div id="episodeList"><div class="empty-state">Loading...</div></div>
 
     </div><!-- /tab-episodes -->
@@ -604,6 +607,7 @@
     function renderEpisodeList(episodes) {
       const el = document.getElementById('episodeList');
       document.getElementById('episodesLabel').textContent = `Episodes (${episodes.length})`;
+      document.getElementById('btnRemoveAll').style.display = episodes.length ? '' : 'none';
       if (!episodes.length) {
         el.innerHTML = '<div class="empty-state">No episodes yet. Add one above.</div>';
         return;
@@ -653,6 +657,30 @@
       const btn = e.target.closest('.btn-remove');
       if (btn) handleRemove(btn.dataset.id);
     });
+
+    async function handleRemoveAll() {
+      if (!confirm('Remove ALL episodes? All local files will be deleted, R2 objects removed, and the feed updated.')) return;
+      const btn = document.getElementById('btnRemoveAll');
+      btn.disabled = true;
+      btn.textContent = 'Removing…';
+      try {
+        const res = await fetch('/podcast/episodes', { method: 'DELETE' });
+        if (!res.ok) {
+          const data = await res.json();
+          btn.disabled = false;
+          btn.textContent = 'Remove All';
+          alert(`Remove failed: ${data.error || res.status}`);
+          return;
+        }
+        loadEpisodes();
+      } catch (e) {
+        btn.disabled = false;
+        btn.textContent = 'Remove All';
+        alert(`Network error: ${e.message}`);
+      }
+    }
+
+    document.getElementById('btnRemoveAll').addEventListener('click', handleRemoveAll);
 
     // ─── Add episode ──────────────────────────────────────────────────────────
 
