@@ -234,11 +234,14 @@ function syncLog(level, message) {
 async function resolveChannelName(url) {
   return new Promise(resolve => {
     const proc = spawn('yt-dlp', [
-      '--flat-playlist', '--playlist-items', '1', '--print', '%(channel)s', url,
+      '--flat-playlist', '--playlist-items', '1', '--print', '%(uploader)s', url,
     ]);
     let out = '';
     proc.stdout.on('data', d => { out += d.toString(); });
-    proc.on('close', () => resolve(out.trim() || url));
+    proc.on('close', () => {
+      const name = out.trim();
+      resolve(name && name !== 'NA' ? name : url);
+    });
     proc.on('error', () => resolve(url));
   });
 }
