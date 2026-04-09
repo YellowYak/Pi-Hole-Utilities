@@ -93,6 +93,38 @@ function writeFeed(episodes) {
   fs.writeFileSync(FEED_FILE, generateFeed(episodes), 'utf8');
 }
 
+async function uploadEpisodeFilesToR2(id, hasThumbnail) {
+  const client = getR2Client();
+  const bucket = process.env.R2_BUCKET_NAME;
+  if (!client || !bucket) return;
+
+  const files = [];
+  const mp3Path = path.join(AUDIO_DIR, `${id}.mp3`);
+  if (fs.existsSync(mp3Path)) {
+    files.push({ localPath: mp3Path, key: `audio/${id}.mp3`, contentType: 'audio/mpeg' });
+  }
+  if (hasThumbnail) {
+    const thumbPath = path.join(THUMBS_DIR, `${id}.jpg`);
+    if (fs.existsSync(thumbPath)) {
+      files.push({ localPath: thumbPath, key: `thumbs/${id}.jpg`, contentType: 'image/jpeg' });
+    }
+  }
+
+  for (const f of files) {
+    try {
+      const body = fs.readFileSync(f.localPath);
+      await client.send(new PutObjectCommand({
+        Bucket: bucket,
+        Key: f.key,
+        Body: body,
+        ContentType: f.contentType,
+      }));
+    } catch (err) {
+      console.error(`[podcast] R2 upload failed for ${f.key}:`, err.message);
+    }
+  }
+}
+
 async function uploadFeedToR2() {
   const client = getR2Client();
   const bucket = process.env.R2_BUCKET_NAME;
@@ -284,6 +316,8 @@ router.post('/episodes', (req, res) => {
     const episodes = [episode, ...readEpisodes()];
     writeEpisodes(episodes);
     writeFeed(episodes);
+    sseSend(res, { type: 'progress', phase: 'uploading' });
+    await uploadEpisodeFilesToR2(id, hasThumbnail);
     await uploadFeedToR2();
 
     sseSend(res, { type: 'done', episode });
