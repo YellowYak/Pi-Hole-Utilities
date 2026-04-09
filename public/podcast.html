@@ -876,7 +876,7 @@
         const cls = e.level === 'error' ? 'log-line-error' : e.level === 'warn' ? 'log-line-warn' : '';
         return `<div class="${cls}">[${ts}] ${e.level.padEnd(5)} ${e.message}</div>`;
       }).join('');
-      el.scrollTop = el.scrollHeight;
+      el.scrollTop = 0;
     }
 
     async function loadSyncLog() {
