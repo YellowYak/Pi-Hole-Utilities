@@ -234,7 +234,7 @@ function syncLog(level, message) {
 async function resolveChannelName(url) {
   return new Promise(resolve => {
     const proc = spawn('yt-dlp', [
-      '--flat-playlist', '--playlist-items', '0', '--print', '%(channel)s', url,
+      '--flat-playlist', '--playlist-items', '1', '--print', '%(channel)s', url,
     ]);
     let out = '';
     proc.stdout.on('data', d => { out += d.toString(); });
