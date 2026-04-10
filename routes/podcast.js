@@ -279,13 +279,6 @@ async function downloadAndAddEpisode(videoUrl, channelId) {
       description     = info.description || '';
       durationSeconds = Math.round(info.duration || 0);
       youtubeId       = info.id || null;
-      // yt-dlp upload_date format: YYYYMMDD
-      if (info.upload_date && /^\d{8}$/.test(info.upload_date)) {
-        const y  = info.upload_date.slice(0, 4);
-        const mo = info.upload_date.slice(4, 6);
-        const d  = info.upload_date.slice(6, 8);
-        pubDate = new Date(`${y}-${mo}-${d}T12:00:00Z`).toUTCString();
-      }
     } catch (err) {
       console.error('[podcast] failed to parse info.json:', err.message);
     }
@@ -507,13 +500,6 @@ router.post('/episodes', (req, res) => {
         description     = info.description || '';
         durationSeconds = Math.round(info.duration || 0);
         youtubeId       = info.id || null;
-        // yt-dlp upload_date format: YYYYMMDD
-        if (info.upload_date && /^\d{8}$/.test(info.upload_date)) {
-          const y  = info.upload_date.slice(0, 4);
-          const mo = info.upload_date.slice(4, 6);
-          const d  = info.upload_date.slice(6, 8);
-          pubDate = new Date(`${y}-${mo}-${d}T12:00:00Z`).toUTCString();
-        }
       } catch (err) {
         console.error('[podcast] failed to parse info.json:', err.message);
       }
