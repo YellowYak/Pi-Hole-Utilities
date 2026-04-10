@@ -22,6 +22,10 @@ const NBA_API_URL  = process.env.NBA_API_URL || 'http://localhost:8000';
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 });
 
+const MAX_UPLOAD_BYTES          = 4 * 1024 * 1024 * 1024;
+const ONE_HOUR_MS               = 60 * 60 * 1000;
+const DOWNLOAD_CLEANUP_DELAY_MS = 10_000;
+
 const storage = multer.diskStorage({
   destination: UPLOAD_DIR,
   filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`)
@@ -29,7 +33,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: 4 * 1024 * 1024 * 1024 },
+  limits: { fileSize: MAX_UPLOAD_BYTES },
   fileFilter: (req, file, cb) => {
     const allowed = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.m4v'];
     const ext = path.extname(file.originalname).toLowerCase();
@@ -44,14 +48,14 @@ app.use('/podcast', require('./routes/podcast'));
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function timeToSeconds(t) {
-  const [h, m, s] = t.split(':');
+function timeToSeconds(timeString) {
+  const [h, m, s] = timeString.split(':');
   return parseFloat(h) * 3600 + parseFloat(m) * 60 + parseFloat(s);
 }
 
-function cleanupPath(p) {
-  if (!p) return;
-  fs.rm(p, { recursive: true, force: true }, () => {});
+function cleanupPath(filePath) {
+  if (!filePath) return;
+  fs.rm(filePath, { recursive: true, force: true }, (err) => { if (err) console.warn('cleanup error:', err.message); });
 }
 
 
@@ -78,11 +82,11 @@ app.post('/upload', upload.single('video'), (req, res) => {
 
   ffmpeg.stderr.on('data', chunk => {
     const text = chunk.toString();
-    const dur = text.match(/Duration:\s*(\d+:\d+:\d+\.\d+)/);
-    if (dur) totalDuration = timeToSeconds(dur[1]);
-    const t = text.match(/time=(\d+:\d+:\d+\.\d+)/);
-    if (t && totalDuration > 0)
-      jobs[jobId].conversionProgress = Math.min(99, Math.round((timeToSeconds(t[1]) / totalDuration) * 100));
+    const durationMatch = text.match(/Duration:\s*(\d+:\d+:\d+\.\d+)/);
+    if (durationMatch) totalDuration = timeToSeconds(durationMatch[1]);
+    const timeMatch = text.match(/time=(\d+:\d+:\d+\.\d+)/);
+    if (timeMatch && totalDuration > 0)
+      jobs[jobId].conversionProgress = Math.min(99, Math.round((timeToSeconds(timeMatch[1]) / totalDuration) * 100));
   });
 
   ffmpeg.on('close', code => {
@@ -110,7 +114,7 @@ app.get('/download/:jobId', (req, res) => {
   if (job.status !== 'done') return res.status(400).json({ error: 'Conversion not complete' });
   res.download(job.outputPath, job.outputFilename, err => {
     if (err) { console.error('Download error:', err); return; }
-    setTimeout(() => { cleanupPath(job.outputPath); delete jobs[req.params.jobId]; }, 10_000);
+    setTimeout(() => { cleanupPath(job.outputPath); delete jobs[req.params.jobId]; }, DOWNLOAD_CLEANUP_DELAY_MS);
   });
 });
 
@@ -256,7 +260,7 @@ app.get('/youtube/download/:jobId', (req, res) => {
       cleanupPath(job.outputPath);
       if (job.jobDir) cleanupPath(job.jobDir);
       delete jobs[req.params.jobId];
-    }, 10_000);
+    }, DOWNLOAD_CLEANUP_DELAY_MS);
   });
 });
 
@@ -264,7 +268,7 @@ app.get('/youtube/download/:jobId', (req, res) => {
 
 app.post('/nba/submit', async (req, res) => {
   const { date } = req.body;
-  if (!date || !/^\d{8}$/.test(date))
+  if (!date || !/^\d{8}$/.test(date)) // NBA API date format: YYYYMMDD
     return res.status(400).json({ error: 'Please provide a valid date in YYYYMMDD format.' });
 
   const jobId = uuidv4();
@@ -299,10 +303,9 @@ app.get('/nba/status/:jobId', (req, res) => {
 // ─── Periodic cleanup ─────────────────────────────────────────────────────────
 
 setInterval(() => {
-  const ONE_HOUR = 60 * 60 * 1000;
   const now = Date.now();
   for (const [jobId, job] of Object.entries(jobs)) {
-    if (now - job.createdAt > ONE_HOUR) {
+    if (now - job.createdAt > ONE_HOUR_MS) {
       if (job.type === 'video') { cleanupPath(job.inputPath); cleanupPath(job.outputPath); }
       if (job.type === 'youtube') { cleanupPath(job.outputPath); if (job.jobDir) cleanupPath(job.jobDir); }
       delete jobs[jobId];
@@ -323,9 +326,9 @@ app.get('/api/system', async (req, res) => {
     const sharedDir  = process.env.SHARED_DIR || path.join(os.homedir(), 'shared');
 
     // Memory (from /proc/meminfo for accuracy)
-    const memTotal = os.totalmem();
-    const memFree  = os.freemem();
-    const memUsed  = memTotal - memFree;
+    const totalMemBytes = os.totalmem();
+    const freeMemBytes  = os.freemem();
+    const usedMemBytes  = totalMemBytes - freeMemBytes;
 
     // Disk space for root filesystem
     const dfOut  = await execPromise('df -B1 --output=size,used,avail /');
@@ -380,7 +383,7 @@ app.get('/api/system', async (req, res) => {
     const activeJobs = Object.values(jobs).filter(j => j.status === 'processing').length;
 
     res.json({
-      memory: { total: memTotal, used: memUsed, free: memFree },
+      memory: { total: totalMemBytes, used: usedMemBytes, free: freeMemBytes },
       disk,
       cpuTemp,
       uptime,

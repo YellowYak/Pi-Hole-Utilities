@@ -127,13 +127,17 @@
   </div>
 
   <script>
+    const GB = 1073741824, MB = 1048576, KB = 1024;
+    const DISK_CRITICAL_PCT = 90, DISK_WARN_PCT = 70;
+    const TEMP_CRITICAL_C = 80, TEMP_WARN_C = 65;
+
     function formatBytes(b) {
-      if (b >= 1073741824) return (b/1073741824).toFixed(1)+' GB';
-      if (b >= 1048576)    return (b/1048576).toFixed(1)+' MB';
-      return (b/1024).toFixed(1)+' KB';
+      if (b >= GB) return (b/GB).toFixed(1)+' GB';
+      if (b >= MB) return (b/MB).toFixed(1)+' MB';
+      return (b/KB).toFixed(1)+' KB';
     }
-    function barClass(pct) { return pct>=90?'error':pct>=70?'warn':'good'; }
-    function tempClass(c)  { const t=parseFloat(c); return t>=80?'error':t>=65?'warn':'good'; }
+    function barClass(pct) { return pct>=DISK_CRITICAL_PCT?'error':pct>=DISK_WARN_PCT?'warn':'good'; }
+    function tempClass(c)  { const t=parseFloat(c); return t>=TEMP_CRITICAL_C?'error':t>=TEMP_WARN_C?'warn':'good'; }
 
     function renderStats(d) {
       const memPct  = Math.round((d.memory.used/d.memory.total)*100);
@@ -142,7 +146,7 @@
       const diskCls = barClass(diskPct);
       const tmpCls  = d.cpuTemp ? tempClass(d.cpuTemp) : '';
       const tempDesc = d.cpuTemp
-        ? (parseFloat(d.cpuTemp)>=80 ? '⚠ Throttling risk' : parseFloat(d.cpuTemp)>=65 ? 'Getting warm' : 'Normal')
+        ? (parseFloat(d.cpuTemp)>=TEMP_CRITICAL_C ? '⚠ Throttling risk' : parseFloat(d.cpuTemp)>=TEMP_WARN_C ? 'Getting warm' : 'Normal')
         : 'Sensor unavailable';
 
       document.getElementById('statsArea').innerHTML = `

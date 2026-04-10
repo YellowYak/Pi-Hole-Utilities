@@ -490,6 +490,8 @@
     const errorMsg    = document.getElementById('errorMsg');
     const logLine     = document.getElementById('logLine');
 
+    const POLL_INTERVAL_MS = 1500;
+
     let selectedFile = null;
     let pollInterval = null;
 
@@ -638,7 +640,7 @@
           clearInterval(pollInterval);
           showError('Lost connection while polling job status.');
         }
-      }, 1500);
+      }, POLL_INTERVAL_MS);
     }
 
     function showSuccess(jobId, filename) {

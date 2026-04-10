@@ -420,6 +420,8 @@
     const errorMsg       = document.getElementById('errorMsg');
     const logLine        = document.getElementById('logLine');
 
+    const POLL_INTERVAL_MS = 1500;
+
     let pollInterval = null;
 
     function log(msg) { logLine.textContent = msg; }
@@ -532,7 +534,7 @@
           clearInterval(pollInterval);
           showError('Lost connection while polling for status.');
         }
-      }, 1500);
+      }, POLL_INTERVAL_MS);
     }
 
     function showSuccess(jobId, filename, outputType) {

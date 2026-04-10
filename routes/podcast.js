@@ -12,6 +12,7 @@ const {
   HeadObjectCommand,
   DeleteObjectCommand,
 } = require('@aws-sdk/client-s3');
+const cron = require('node-cron');
 
 const PODCAST_DIR   = path.join(__dirname, '..', 'podcast');
 const AUDIO_DIR     = path.join(PODCAST_DIR, 'audio');
@@ -32,7 +33,8 @@ function readEpisodes() {
   try {
     if (!fs.existsSync(EPISODES_FILE)) return [];
     return JSON.parse(fs.readFileSync(EPISODES_FILE, 'utf8'));
-  } catch {
+  } catch (err) {
+    console.warn('Failed to parse episodes.json:', err.message);
     return [];
   }
 }
@@ -59,10 +61,10 @@ function generateFeed(episodes) {
   const sorted = [...episodes].sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
 
   const items = sorted.map(ep => {
-    const h = Math.floor(ep.durationSeconds / 3600);
-    const m = Math.floor((ep.durationSeconds % 3600) / 60);
-    const s = ep.durationSeconds % 60;
-    const durStr = `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    const hours   = Math.floor(ep.durationSeconds / 3600);
+    const minutes = Math.floor((ep.durationSeconds % 3600) / 60);
+    const secs    = ep.durationSeconds % 60;
+    const durationString = `${hours}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
     const audioUrl = `${base}/audio/${ep.id}.mp3`;
     const thumbUrl = ep.thumbFile ? `${base}/thumbs/${ep.id}.jpg` : '';
 
@@ -72,7 +74,7 @@ function generateFeed(episodes) {
       <description><![CDATA[${ep.description || ''}]]></description>
       <pubDate>${ep.pubDate}</pubDate>
       <enclosure url="${audioUrl}" length="${ep.fileSizeBytes}" type="audio/mpeg"/>
-      <itunes:duration>${durStr}</itunes:duration>${thumbUrl ? `\n      <itunes:image href="${thumbUrl}"/>` : ''}
+      <itunes:duration>${durationString}</itunes:duration>${thumbUrl ? `\n      <itunes:image href="${thumbUrl}"/>` : ''}
       <guid isPermaLink="true">${audioUrl}</guid>
     </item>`;
   }).join('');
@@ -112,17 +114,17 @@ async function uploadEpisodeFilesToR2(id, hasThumbnail) {
     }
   }
 
-  for (const f of files) {
+  for (const file of files) {
     try {
-      const body = fs.readFileSync(f.localPath);
+      const body = fs.readFileSync(file.localPath);
       await client.send(new PutObjectCommand({
         Bucket: bucket,
-        Key: f.key,
+        Key: file.key,
         Body: body,
-        ContentType: f.contentType,
+        ContentType: file.contentType,
       }));
     } catch (err) {
-      console.error(`[podcast] R2 upload failed for ${f.key}:`, err.message);
+      console.error(`[podcast] R2 upload failed for ${file.key}:`, err.message);
     }
   }
 }
@@ -240,6 +242,7 @@ async function resolveChannelName(url) {
     proc.stdout.on('data', d => { out += d.toString(); });
     proc.on('close', () => {
       const name = out.trim();
+      // yt-dlp outputs 'NA' when channel name is unavailable
       resolve(name && name !== 'NA' ? name : url);
     });
     proc.on('error', () => resolve(url));
@@ -276,6 +279,7 @@ async function downloadAndAddEpisode(videoUrl, channelId) {
       description     = info.description || '';
       durationSeconds = Math.round(info.duration || 0);
       youtubeId       = info.id || null;
+      // yt-dlp upload_date format: YYYYMMDD
       if (info.upload_date && /^\d{8}$/.test(info.upload_date)) {
         const y  = info.upload_date.slice(0, 4);
         const mo = info.upload_date.slice(4, 6);
@@ -289,7 +293,7 @@ async function downloadAndAddEpisode(videoUrl, channelId) {
   }
 
   let fileSizeBytes = 0;
-  try { fileSizeBytes = fs.statSync(path.join(AUDIO_DIR, `${id}.mp3`)).size; } catch {}
+  try { fileSizeBytes = fs.statSync(path.join(AUDIO_DIR, `${id}.mp3`)).size; } catch (err) { console.warn('Could not stat file:', err.message); }
 
   const hasThumbnail = await resolveThumbnail(id);
 
@@ -315,15 +319,15 @@ async function downloadAndAddEpisode(videoUrl, channelId) {
 }
 
 async function syncChannel(channel) {
-  let ch = readChannels();
-  let idx = ch.findIndex(c => c.id === channel.id);
-  if (idx === -1) return;
+  let channels = readChannels();
+  let channelIdx = channels.findIndex(c => c.id === channel.id);
+  if (channelIdx === -1) return;
 
-  ch[idx] = { ...ch[idx], status: 'syncing', lastCheckedAt: new Date().toISOString() };
-  writeChannels(ch);
+  channels[channelIdx] = { ...channels[channelIdx], status: 'syncing', lastCheckedAt: new Date().toISOString() };
+  writeChannels(channels);
 
-  const name = ch[idx].name;
-  const lastSynced = ch[idx].lastSyncedAt;
+  const name = channels[channelIdx].name;
+  const lastSynced = channels[channelIdx].lastSyncedAt;
   const dateAfter = lastSynced
     ? lastSynced.slice(0, 10).replace(/-/g, '')
     : new Date().toISOString().slice(0, 10).replace(/-/g, '');
@@ -331,6 +335,7 @@ async function syncChannel(channel) {
   syncLog('info', `[channel:${channel.id}] sync start url=${channel.url} dateAfter=${dateAfter} lastSyncedAt=${lastSynced || 'null'}`);
 
   try {
+    // check only the 5 most recent videos
     const ytdlpListArgs = ['--playlist-end', '5', '--get-id', '--dateafter', dateAfter, channel.url];
     syncLog('info', `[channel:${channel.id}] yt-dlp ${ytdlpListArgs.join(' ')}`);
     const { listExitCode, videoIds } = await new Promise((resolve, reject) => {
@@ -347,8 +352,8 @@ async function syncChannel(channel) {
     syncLog('info', `[channel:${channel.id}] yt-dlp exit:${listExitCode} ids=${videoIds.length > 0 ? videoIds.join(',') : 'none'}`);
 
     if (videoIds.length === 0) {
-      ch = readChannels(); idx = ch.findIndex(c => c.id === channel.id);
-      if (idx !== -1) { ch[idx] = { ...ch[idx], status: 'idle' }; writeChannels(ch); }
+      channels = readChannels(); channelIdx = channels.findIndex(c => c.id === channel.id);
+      if (channelIdx !== -1) { channels[channelIdx] = { ...channels[channelIdx], status: 'idle' }; writeChannels(channels); }
       return;
     }
 
@@ -358,8 +363,8 @@ async function syncChannel(channel) {
     syncLog('info', `[channel:${channel.id}] dedup: ${newIds.length} new, ${videoIds.length - newIds.length} already in episodes`);
 
     if (newIds.length === 0) {
-      ch = readChannels(); idx = ch.findIndex(c => c.id === channel.id);
-      if (idx !== -1) { ch[idx] = { ...ch[idx], status: 'idle' }; writeChannels(ch); }
+      channels = readChannels(); channelIdx = channels.findIndex(c => c.id === channel.id);
+      if (channelIdx !== -1) { channels[channelIdx] = { ...channels[channelIdx], status: 'idle' }; writeChannels(channels); }
       return;
     }
 
@@ -372,18 +377,18 @@ async function syncChannel(channel) {
         downloaded.push(ep);
       } catch (err) {
         syncLog('error', `[channel:${channel.id}] download failed youtubeId=${videoId}: ${err.message}`);
-        ch = readChannels(); idx = ch.findIndex(c => c.id === channel.id);
-        if (idx !== -1) {
-          ch[idx] = { ...ch[idx], errorCount: (ch[idx].errorCount || 0) + 1 };
-          writeChannels(ch);
+        channels = readChannels(); channelIdx = channels.findIndex(c => c.id === channel.id);
+        if (channelIdx !== -1) {
+          channels[channelIdx] = { ...channels[channelIdx], errorCount: (channels[channelIdx].errorCount || 0) + 1 };
+          writeChannels(channels);
         }
       }
     }
 
-    ch = readChannels(); idx = ch.findIndex(c => c.id === channel.id);
-    if (idx !== -1) {
-      ch[idx] = { ...ch[idx], status: 'idle', lastSyncedAt: new Date().toISOString(), errorCount: 0 };
-      writeChannels(ch);
+    channels = readChannels(); channelIdx = channels.findIndex(c => c.id === channel.id);
+    if (channelIdx !== -1) {
+      channels[channelIdx] = { ...channels[channelIdx], status: 'idle', lastSyncedAt: new Date().toISOString(), errorCount: 0 };
+      writeChannels(channels);
     }
 
     for (const ep of downloaded) {
@@ -393,10 +398,10 @@ async function syncChannel(channel) {
     syncLog('info', `[channel:${channel.id}] sync complete: ${downloaded.length}/${newIds.length} downloaded, R2 upload done`);
 
   } catch (err) {
-    ch = readChannels(); idx = ch.findIndex(c => c.id === channel.id);
-    if (idx !== -1) {
-      ch[idx] = { ...ch[idx], status: 'error', errorCount: (ch[idx].errorCount || 0) + 1 };
-      writeChannels(ch);
+    channels = readChannels(); channelIdx = channels.findIndex(c => c.id === channel.id);
+    if (channelIdx !== -1) {
+      channels[channelIdx] = { ...channels[channelIdx], status: 'error', errorCount: (channels[channelIdx].errorCount || 0) + 1 };
+      writeChannels(channels);
     }
     throw err;
   }
@@ -502,6 +507,7 @@ router.post('/episodes', (req, res) => {
         description     = info.description || '';
         durationSeconds = Math.round(info.duration || 0);
         youtubeId       = info.id || null;
+        // yt-dlp upload_date format: YYYYMMDD
         if (info.upload_date && /^\d{8}$/.test(info.upload_date)) {
           const y  = info.upload_date.slice(0, 4);
           const mo = info.upload_date.slice(4, 6);
@@ -518,7 +524,7 @@ router.post('/episodes', (req, res) => {
     let fileSizeBytes = 0;
     try {
       fileSizeBytes = fs.statSync(path.join(AUDIO_DIR, `${id}.mp3`)).size;
-    } catch {}
+    } catch (err) { console.warn('Could not stat file:', err.message); }
 
     // Resolve thumbnail (jpg preferred, webp fallback via sharp)
     const hasThumbnail = await resolveThumbnail(id);
@@ -749,8 +755,6 @@ router.post('/deploy', async (req, res) => {
 });
 
 // ─── Scheduler ───────────────────────────────────────────────────────────────
-
-const cron = require('node-cron');
 
 // Channel sync — every 4 hours
 cron.schedule('0 */4 * * *', () => {

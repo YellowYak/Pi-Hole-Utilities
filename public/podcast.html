@@ -557,6 +557,10 @@
   </div>
 
   <script>
+    const ADD_RESET_DELAY_MS    = 3000;
+    const SYNC_POLL_MS          = 2000;
+    const CHANNELS_REFRESH_MS   = 30000;
+
     // ─── Utilities ────────────────────────────────────────────────────────────
 
     function formatDuration(secs) {
@@ -771,7 +775,7 @@
           phaseStatus.textContent = `Added: ${event.episode.title}`;
           urlInput.value = '';
           loadEpisodes();
-          setTimeout(resetAdd, 3000);
+          setTimeout(resetAdd, ADD_RESET_DELAY_MS);
         } else if (event.type === 'error') {
           addProgress.classList.remove('visible');
           showAddError(event.message);
@@ -879,7 +883,7 @@
         const r = await fetch('/podcast/channels');
         channels = await r.json();
         renderChannelList();
-      } catch { channels = []; }
+      } catch (err) { console.error('Failed to load channels:', err); channels = []; }
     }
 
     function renderSyncLog(entries) {
@@ -944,13 +948,14 @@
       try {
         await fetch(`/podcast/channels/${id}`, { method: 'DELETE' });
         await loadChannels();
-      } catch (e) {
-        alert(`Failed to remove channel: ${e.message}`);
+      } catch (err) {
+        console.error('Remove channel failed:', err);
+        alert(`Failed to remove channel: ${err.message}`);
       }
     }
 
     async function handleSyncNow() {
-      try { await fetch('/podcast/channels/sync', { method: 'POST' }); } catch {}
+      try { await fetch('/podcast/channels/sync', { method: 'POST' }); } catch (err) { console.error('Sync trigger failed:', err); }
       let polls = 0;
       const fastPoll = setInterval(async () => {
         await loadChannels();
@@ -959,7 +964,7 @@
           clearInterval(fastPoll);
           loadSyncLog();
         }
-      }, 2000);
+      }, SYNC_POLL_MS);
     }
 
     document.getElementById('channelList').addEventListener('click', e => {
@@ -986,7 +991,7 @@
       loadChannels();
       loadSyncLog();
       if (!channelsPoller) {
-        channelsPoller = setInterval(() => { loadChannels(); loadSyncLog(); }, 30000);
+        channelsPoller = setInterval(() => { loadChannels(); loadSyncLog(); }, CHANNELS_REFRESH_MS);
       }
     }
 
