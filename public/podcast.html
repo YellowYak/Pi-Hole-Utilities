@@ -441,6 +441,7 @@
 
     /* ─── Channel list ──────────────────────────────────────────────────────── */
     .ch-url { font-family: var(--mono); font-size: 11px; color: var(--text-dim); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ch-url a { color: inherit; text-decoration: none; }
     .ch-status { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
     .status-badge { font-family: var(--mono); font-size: 10px; padding: 2px 6px; border-radius: 3px; }
     .badge-idle    { background: rgba(255,255,255,0.05); color: var(--text-dim); }
@@ -870,7 +871,7 @@
         <div class="episode-card" data-id="${ch.id}">
           <div class="episode-meta">
             <div class="episode-title">${ch.name}</div>
-            <div class="ch-url">${ch.url}</div>
+            <div class="ch-url"><a href="${ch.url}" target="_blank" rel="noopener noreferrer">${ch.url}</a></div>
             <div class="ch-status">
               <span class="status-badge ${statusCls}">${ch.status}</span>
               ${ch.errorCount > 0 ? `<span class="ch-error-count">${ch.errorCount} err</span>` : ''}
