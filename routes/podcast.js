@@ -321,9 +321,8 @@ async function syncChannel(channel) {
 
   const name = channels[channelIdx].name;
   const lastSynced = channels[channelIdx].lastSyncedAt;
-  const dateAfter = lastSynced
-    ? lastSynced.slice(0, 10).replace(/-/g, '')
-    : new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  const dateAfterBase = lastSynced || channels[channelIdx].addedAt || new Date().toISOString();
+  const dateAfter = dateAfterBase.slice(0, 10).replace(/-/g, '');
 
   syncLog('info', `[channel:${channel.id}] sync start url=${channel.url} dateAfter=${dateAfter} lastSyncedAt=${lastSynced || 'null'}`);
 
