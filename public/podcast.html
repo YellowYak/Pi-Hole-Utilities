@@ -562,6 +562,7 @@
     const ADD_RESET_DELAY_MS    = 3000;
     const SYNC_POLL_MS          = 2000;
     const CHANNELS_REFRESH_MS   = 30000;
+    const EPISODES_REFRESH_MS   = 60000;
 
     // ─── Utilities ────────────────────────────────────────────────────────────
 
@@ -1021,7 +1022,7 @@
 
     function startEpisodesPolling() {
       if (!episodesPoller) {
-        episodesPoller = setInterval(loadEpisodes, 60000);
+        episodesPoller = setInterval(loadEpisodes, EPISODES_REFRESH_MS);
       }
     }
 

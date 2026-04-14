@@ -25,6 +25,7 @@ const NBA_API_URL  = process.env.NBA_API_URL || 'http://localhost:8000';
 const MAX_UPLOAD_BYTES          = 4 * 1024 * 1024 * 1024;
 const ONE_HOUR_MS               = 60 * 60 * 1000;
 const DOWNLOAD_CLEANUP_DELAY_MS = 10_000;
+const CLEANUP_INTERVAL_MS       = 15 * 60 * 1000;
 
 const storage = multer.diskStorage({
   destination: UPLOAD_DIR,
@@ -311,7 +312,7 @@ setInterval(() => {
       delete jobs[jobId];
     }
   }
-}, 15 * 60 * 1000);
+}, CLEANUP_INTERVAL_MS);
 
 // ─── System Info API ──────────────────────────────────────────────────────────
 
@@ -333,11 +334,11 @@ app.get('/api/system', async (req, res) => {
     // Disk space for root filesystem
     const dfOut  = await execPromise('df -B1 --output=size,used,avail /');
     const dfLines = dfOut.split('\n').filter(l => l.trim() && !l.startsWith('1B'));
-    const dfParts = dfLines[0]?.trim().split(/\s+/) || [];
+    const diskSpaceColumns = dfLines[0]?.trim().split(/\s+/) || [];
     const disk = {
-      total: parseInt(dfParts[0]) || 0,
-      used:  parseInt(dfParts[1]) || 0,
-      avail: parseInt(dfParts[2]) || 0,
+      total: parseInt(diskSpaceColumns[0]) || 0,
+      used:  parseInt(diskSpaceColumns[1]) || 0,
+      avail: parseInt(diskSpaceColumns[2]) || 0,
     };
 
     // CPU temperature (Pi-specific)
@@ -345,10 +346,13 @@ app.get('/api/system', async (req, res) => {
     const cpuTemp = tempRaw ? (parseInt(tempRaw) / 1000).toFixed(1) : null;
 
     // System uptime
+    const SECS_PER_DAY  = 86400;
+    const SECS_PER_HOUR = 3600;
+    const SECS_PER_MIN  = 60;
     const uptimeSecs = os.uptime();
-    const uptimeDays  = Math.floor(uptimeSecs / 86400);
-    const uptimeHours = Math.floor((uptimeSecs % 86400) / 3600);
-    const uptimeMins  = Math.floor((uptimeSecs % 3600) / 60);
+    const uptimeDays  = Math.floor(uptimeSecs / SECS_PER_DAY);
+    const uptimeHours = Math.floor((uptimeSecs % SECS_PER_DAY) / SECS_PER_HOUR);
+    const uptimeMins  = Math.floor((uptimeSecs % SECS_PER_HOUR) / SECS_PER_MIN);
     const uptime = uptimeDays > 0
       ? `${uptimeDays}d ${uptimeHours}h ${uptimeMins}m`
       : uptimeHours > 0

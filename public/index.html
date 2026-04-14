@@ -144,7 +144,7 @@
       const diskPct = Math.round((d.disk.used/d.disk.total)*100);
       const memCls  = barClass(memPct);
       const diskCls = barClass(diskPct);
-      const tmpCls  = d.cpuTemp ? tempClass(d.cpuTemp) : '';
+      const tempCls  = d.cpuTemp ? tempClass(d.cpuTemp) : '';
       const tempDesc = d.cpuTemp
         ? (parseFloat(d.cpuTemp)>=TEMP_CRITICAL_C ? '⚠ Throttling risk' : parseFloat(d.cpuTemp)>=TEMP_WARN_C ? 'Getting warm' : 'Normal')
         : 'Sensor unavailable';
@@ -165,7 +165,7 @@
           </div>
           <div class="stat-card">
             <div class="stat-label">CPU Temp</div>
-            <div class="stat-value ${tmpCls}">${d.cpuTemp ? d.cpuTemp+'°C' : 'N/A'}</div>
+            <div class="stat-value ${tempCls}">${d.cpuTemp ? d.cpuTemp+'°C' : 'N/A'}</div>
             <div class="stat-sub">${tempDesc}</div>
           </div>
           <div class="stat-card">

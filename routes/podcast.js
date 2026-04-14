@@ -22,6 +22,9 @@ const FEED_FILE     = path.join(PODCAST_DIR, 'feed.xml');
 const CHANNELS_FILE = path.join(PODCAST_DIR, 'channels.json');
 const SYNC_LOG_FILE = path.join(PODCAST_DIR, 'sync-log.json');
 
+const MAX_VIDEOS_PER_SYNC      = 5;
+const PROCESSING_PHASE_MARKERS = ['[Metadata]', '[EmbedThumbnail]', '[ThumbnailsConvertor]'];
+
 // Create dirs on startup (mirrors server.js lines 21-23)
 [PODCAST_DIR, AUDIO_DIR, THUMBS_DIR].forEach(d => {
   if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
@@ -53,7 +56,7 @@ function escapeXml(str) {
 }
 
 function generateFeed(episodes) {
-  const base   = (process.env.R2_PUBLIC_BASE_URL || '').replace(/\/$/, '');
+  const r2BaseUrl = (process.env.R2_PUBLIC_BASE_URL || '').replace(/\/$/, '');
   const title  = process.env.PODCAST_TITLE  || 'My Podcast';
   const author = process.env.PODCAST_AUTHOR || '';
 
@@ -65,8 +68,8 @@ function generateFeed(episodes) {
     const minutes = Math.floor((ep.durationSeconds % 3600) / 60);
     const secs    = ep.durationSeconds % 60;
     const durationString = `${hours}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-    const audioUrl = `${base}/audio/${ep.id}.mp3`;
-    const thumbUrl = ep.thumbFile ? `${base}/thumbs/${ep.id}.jpg` : '';
+    const audioUrl = `${r2BaseUrl}/audio/${ep.id}.mp3`;
+    const thumbUrl = ep.thumbFile ? `${r2BaseUrl}/thumbs/${ep.id}.jpg` : '';
 
     return `
     <item>
@@ -83,7 +86,7 @@ function generateFeed(episodes) {
 <rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd">
   <channel>
     <title>${escapeXml(title)}</title>
-    <link>${base}</link>
+    <link>${r2BaseUrl}</link>
     <description>${escapeXml(title)}</description>
     <language>en-us</language>
     <itunes:author>${escapeXml(author)}</itunes:author>
@@ -238,10 +241,10 @@ async function resolveChannelName(url) {
     const proc = spawn('yt-dlp', [
       '--flat-playlist', '--playlist-items', '1', '--print', '%(playlist_uploader)s', url,
     ]);
-    let out = '';
-    proc.stdout.on('data', d => { out += d.toString(); });
+    let stdout = '';
+    proc.stdout.on('data', d => { stdout += d.toString(); });
     proc.on('close', () => {
-      const name = out.trim();
+      const name = stdout.trim();
       // yt-dlp outputs 'NA' when channel name is unavailable
       resolve(name && name !== 'NA' ? name : url);
     });
@@ -327,17 +330,17 @@ async function syncChannel(channel) {
   syncLog('info', `[channel:${channel.id}] sync start url=${channel.url} dateAfter=${dateAfter} lastSyncedAt=${lastSynced || 'null'}`);
 
   try {
-    // check only the 5 most recent videos
-    const ytdlpListArgs = ['--playlist-end', '5', '--get-id', '--dateafter', dateAfter, channel.url];
+    // check only the most recent videos
+    const ytdlpListArgs = ['--playlist-end', String(MAX_VIDEOS_PER_SYNC), '--get-id', '--dateafter', dateAfter, channel.url];
     syncLog('info', `[channel:${channel.id}] yt-dlp ${ytdlpListArgs.join(' ')}`);
     const { listExitCode, videoIds } = await new Promise((resolve, reject) => {
       const proc = spawn('yt-dlp', ytdlpListArgs);
-      let out = '';
-      proc.stdout.on('data', d => { out += d.toString(); });
+      let stdout = '';
+      proc.stdout.on('data', d => { stdout += d.toString(); });
       proc.stderr.on('data', d => console.error('[sync yt-dlp]', d.toString().trim()));
       proc.on('error', err => reject(new Error(`yt-dlp spawn failed: ${err.message}`)));
       proc.on('close', code => {
-        const ids = out.split('\n').map(s => s.trim()).filter(Boolean);
+        const ids = stdout.split('\n').map(s => s.trim()).filter(Boolean);
         resolve({ listExitCode: code, videoIds: ids });
       });
     });
@@ -384,7 +387,7 @@ async function syncChannel(channel) {
     }
 
     for (const ep of downloaded) {
-      await uploadEpisodeFilesToR2(ep.id, !!ep.thumbFile);
+      await uploadEpisodeFilesToR2(ep.id, Boolean(ep.thumbFile));
     }
     await uploadFeedToR2();
     syncLog('info', `[channel:${channel.id}] sync complete: ${downloaded.length}/${newIds.length} downloaded, R2 upload done`);
@@ -463,7 +466,7 @@ router.post('/episodes', (req, res) => {
     if (text.includes('[ExtractAudio]')) {
       sseSend(res, { type: 'progress', phase: 'extracting' });
     }
-    if (text.includes('[Metadata]') || text.includes('[EmbedThumbnail]') || text.includes('[ThumbnailsConvertor]')) {
+    if (PROCESSING_PHASE_MARKERS.some(m => text.includes(m))) {
       sseSend(res, { type: 'progress', phase: 'processing' });
     }
   });

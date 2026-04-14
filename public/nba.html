@@ -579,12 +579,16 @@
     let elapsedInterval = null;
     let elapsedSeconds  = 0;
 
+    function toIsoDateString(date) {
+      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    }
+
     // Default to yesterday (local time, not UTC); max is today (games still in progress)
     const today = new Date();
-    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    const todayStr = toIsoDateString(today);
     const yesterday = new Date(today);
     yesterday.setDate(today.getDate() - 1);
-    const yesterdayStr = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, '0')}-${String(yesterday.getDate()).padStart(2, '0')}`;
+    const yesterdayStr = toIsoDateString(yesterday);
     dateInput.value = yesterdayStr;
     dateInput.max   = todayStr;
 
@@ -720,9 +724,12 @@
       log(`scored ${games ? games.length : 0} game(s) — ${dateStr}`);
     }
 
-    function scoreColor(s) {
-      if (s >= 80) return 'var(--success)';
-      if (s >= 60) return 'var(--warn)';
+    const SCORE_GOOD = 80;
+    const SCORE_WARN = 60;
+
+    function scoreColor(score) {
+      if (score >= SCORE_GOOD) return 'var(--success)';
+      if (score >= SCORE_WARN) return 'var(--warn)';
       return 'var(--error)';
     }
 
