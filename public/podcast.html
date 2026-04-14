@@ -894,7 +894,7 @@
         el.innerHTML = '<div class="empty-state">No channels yet. Add one above.</div>';
         return;
       }
-      const sorted = [...channels].sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }));
+      const sorted = [...channels].sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }));
       el.innerHTML = `<div class="episode-list">${sorted.map(renderChannelCard).join('')}</div>`;
     }
 
