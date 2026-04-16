@@ -544,6 +544,29 @@ router.post('/episodes', (req, res) => {
   });
 });
 
+// ─── Episode file cleanup helper ─────────────────────────────────────────────
+
+async function deleteEpisodeFiles(episodes) {
+  for (const ep of episodes) {
+    fs.rm(path.join(AUDIO_DIR,  `${ep.id}.mp3`), { force: true }, () => {});
+    fs.rm(path.join(THUMBS_DIR, `${ep.id}.jpg`), { force: true }, () => {});
+  }
+  const client = getR2Client();
+  const bucket = process.env.R2_BUCKET_NAME;
+  if (client && bucket) {
+    for (const ep of episodes) {
+      for (const key of [`audio/${ep.id}.mp3`, `thumbs/${ep.id}.jpg`]) {
+        try {
+          await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
+        } catch (err) {
+          if (err.$metadata?.httpStatusCode !== 404 && err.name !== 'NotFound')
+            console.error(`[podcast] R2 delete failed for ${key}:`, err.message);
+        }
+      }
+    }
+  }
+}
+
 // ─── DELETE /episodes/:id ─────────────────────────────────────────────────────
 
 router.delete('/episodes/:id', async (req, res) => {
@@ -552,24 +575,7 @@ router.delete('/episodes/:id', async (req, res) => {
   const ep = episodes.find(e => e.id === id);
   if (!ep) return res.status(404).json({ error: 'Episode not found' });
 
-  // Delete local files (force: true = no error if already gone)
-  fs.rm(path.join(AUDIO_DIR, `${id}.mp3`),  { force: true }, () => {});
-  fs.rm(path.join(THUMBS_DIR, `${id}.jpg`), { force: true }, () => {});
-
-  // Delete from R2 if configured (treat 404 as no-op — may never have been deployed)
-  const client = getR2Client();
-  const bucket = process.env.R2_BUCKET_NAME;
-  if (client && bucket) {
-    for (const key of [`audio/${id}.mp3`, `thumbs/${id}.jpg`]) {
-      try {
-        await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
-      } catch (err) {
-        if (err.$metadata?.httpStatusCode !== 404 && err.name !== 'NotFound') {
-          console.error(`[podcast] R2 delete failed for ${key}:`, err.message);
-        }
-      }
-    }
-  }
+  await deleteEpisodeFiles([ep]);
 
   const updated = episodes.filter(e => e.id !== id);
   writeEpisodes(updated);
@@ -584,26 +590,7 @@ router.delete('/episodes/:id', async (req, res) => {
 router.delete('/episodes', async (req, res) => {
   const episodes = readEpisodes();
 
-  for (const ep of episodes) {
-    fs.rm(path.join(AUDIO_DIR,  `${ep.id}.mp3`), { force: true }, () => {});
-    fs.rm(path.join(THUMBS_DIR, `${ep.id}.jpg`), { force: true }, () => {});
-  }
-
-  const client = getR2Client();
-  const bucket = process.env.R2_BUCKET_NAME;
-  if (client && bucket) {
-    for (const ep of episodes) {
-      for (const key of [`audio/${ep.id}.mp3`, `thumbs/${ep.id}.jpg`]) {
-        try {
-          await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
-        } catch (err) {
-          if (err.$metadata?.httpStatusCode !== 404 && err.name !== 'NotFound') {
-            console.error(`[podcast] R2 delete failed for ${key}:`, err.message);
-          }
-        }
-      }
-    }
-  }
+  await deleteEpisodeFiles(episodes);
 
   writeEpisodes([]);
   writeFeed([]);
@@ -743,6 +730,25 @@ router.post('/deploy', async (req, res) => {
 });
 
 // ─── Scheduler ───────────────────────────────────────────────────────────────
+
+async function pruneOldEpisodes() {
+  const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const episodes = readEpisodes();
+  const old = episodes.filter(ep => new Date(ep.pubDate).getTime() < cutoff);
+  if (old.length === 0) return;
+
+  await deleteEpisodeFiles(old);
+  const kept = episodes.filter(ep => new Date(ep.pubDate).getTime() >= cutoff);
+  writeEpisodes(kept);
+  writeFeed(kept);
+  await uploadFeedToR2();
+  syncLog('info', `pruned ${old.length} episode(s) older than 7 days`);
+}
+
+// Episode pruning — daily at 3:30 AM
+cron.schedule('30 3 * * *', () => {
+  pruneOldEpisodes().catch(err => syncLog('error', `episode prune failed: ${err.message}`));
+});
 
 // Channel sync — every 4 hours
 cron.schedule('0 */4 * * *', () => {
