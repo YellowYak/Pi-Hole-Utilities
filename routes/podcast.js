@@ -23,6 +23,7 @@ const CHANNELS_FILE = path.join(PODCAST_DIR, 'channels.json');
 const SYNC_LOG_FILE = path.join(PODCAST_DIR, 'sync-log.json');
 
 const MAX_VIDEOS_PER_SYNC      = 5;
+const MIN_DURATION_SECONDS     = 180; // 3 minutes
 const PROCESSING_PHASE_MARKERS = ['[Metadata]', '[EmbedThumbnail]', '[ThumbnailsConvertor]'];
 
 // Create dirs on startup (mirrors server.js lines 21-23)
@@ -331,7 +332,7 @@ async function syncChannel(channel) {
 
   try {
     // check only the most recent videos
-    const ytdlpListArgs = ['--playlist-end', String(MAX_VIDEOS_PER_SYNC), '--get-id', '--dateafter', dateAfter, channel.url];
+    const ytdlpListArgs = ['--playlist-end', String(MAX_VIDEOS_PER_SYNC), '--print', '%(id)s %(duration)s', '--dateafter', dateAfter, channel.url];
     syncLog('info', `[channel:${channel.id}] yt-dlp ${ytdlpListArgs.join(' ')}`);
     const { listExitCode, videoIds } = await new Promise((resolve, reject) => {
       const proc = spawn('yt-dlp', ytdlpListArgs);
@@ -340,7 +341,15 @@ async function syncChannel(channel) {
       proc.stderr.on('data', d => console.error('[sync yt-dlp]', d.toString().trim()));
       proc.on('error', err => reject(new Error(`yt-dlp spawn failed: ${err.message}`)));
       proc.on('close', code => {
-        const ids = stdout.split('\n').map(s => s.trim()).filter(Boolean);
+        const entries = stdout.split('\n').map(s => s.trim()).filter(Boolean).map(line => {
+          const [id, dur] = line.split(' ');
+          return { id, duration: parseInt(dur, 10) || 0 };
+        });
+        const shortSkipped = entries.filter(e => e.duration > 0 && e.duration < MIN_DURATION_SECONDS);
+        if (shortSkipped.length > 0) {
+          syncLog('info', `[channel:${channel.id}] skipping ${shortSkipped.length} short video(s) under ${MIN_DURATION_SECONDS}s: ${shortSkipped.map(e => e.id).join(', ')}`);
+        }
+        const ids = entries.filter(e => e.duration === 0 || e.duration >= MIN_DURATION_SECONDS).map(e => e.id);
         resolve({ listExitCode: code, videoIds: ids });
       });
     });
