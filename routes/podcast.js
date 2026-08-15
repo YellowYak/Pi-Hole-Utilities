@@ -767,7 +767,7 @@ cron.schedule('0 */4 * * *', () => {
 
 // yt-dlp self-update — Sundays at 3am
 cron.schedule('0 3 * * 0', () => {
-  const cmd = 'pip3 install -U yt-dlp --break-system-packages';
+  const cmd = 'pip3 install -U "yt-dlp[default]" --break-system-packages';
   syncLog('info', `yt-dlp update: ${cmd}`);
   const { exec } = require('child_process');
   exec(cmd, (err, _stdout, stderr) => {

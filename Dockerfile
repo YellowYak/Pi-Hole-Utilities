@@ -8,7 +8,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Install yt-dlp via pip rather than apt-get in order to get the latest & greatest
-RUN pip3 install --break-system-packages yt-dlp
+RUN pip3 install --break-system-packages "yt-dlp[default]"
 
 
 # Environment variables
